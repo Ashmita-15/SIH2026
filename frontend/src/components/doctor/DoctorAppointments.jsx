@@ -13,6 +13,7 @@ import { SkeletonList } from '../ui/Skeleton'
 import { EmptyState, ErrorState } from '../ui/States'
 import AppointmentCard from '../AppointmentCard'
 import AppointmentAttachments from './AppointmentAttachments'
+import AssistedContext from './AssistedContext'
 import { isToday, isFuture } from '../../lib/status'
 
 const TIME_SLOTS = [
@@ -202,6 +203,7 @@ export default function DoctorAppointments({ mode = 'all', onJoinRoom }) {
               </>
             }
           >
+            <AssistedContext appointment={appointment} />
             <AppointmentAttachments attachments={appointment.attachments} />
           </AppointmentCard>
         ))

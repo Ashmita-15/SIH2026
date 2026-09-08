@@ -17,7 +17,8 @@
     "patient": "ਮਰੀਜ਼",
     "doctor": "ਡਾਕਟਰ",
     "pharmacy": "ਦਵਾਈ ਦੀ ਦੁਕਾਨ",
-    "hospital": "ਹਸਪਤਾਲ"
+    "hospital": "ਹਸਪਤਾਲ",
+    "health_worker": "ਸਿਹਤ ਕਰਮਚਾਰੀ"
   },
   "common": {
     "save": "ਸੰਭਾਲੋ",
@@ -591,7 +592,8 @@
       "home": "ਹੋਮ",
       "care": "ਇਲਾਜ",
       "records": "ਰਿਕਾਰਡ",
-      "medicine": "ਦਵਾਈ"
+      "medicine": "ਦਵਾਈ",
+      "orders": "ਮੇਰੇ ਆਰਡਰ"
     },
     "doctor": {
       "today": "ਅੱਜ",
@@ -605,7 +607,14 @@
       "orders": "ਆਰਡਰ"
     },
     "hospital": {
-      "overview": "ਸਾਰ"
+      "overview": "ਸਾਰ",
+      "referrals": "ਰੈਫ਼ਰਲ",
+      "coordination": "ਤਾਲਮੇਲ"
+    },
+    "health_worker": {
+      "overview": "ਕੰਮ ਸੂਚੀ",
+      "patients": "ਮਰੀਜ਼",
+      "referrals": "ਰੈਫ਼ਰਲ"
     }
   },
   "care": {

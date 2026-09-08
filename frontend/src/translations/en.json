@@ -17,7 +17,8 @@
     "patient": "Patient",
     "doctor": "Doctor",
     "pharmacy": "Pharmacy",
-    "hospital": "Hospital"
+    "hospital": "Hospital",
+    "health_worker": "Health worker"
   },
   "common": {
     "save": "Save",
@@ -591,7 +592,8 @@
       "home": "Home",
       "care": "Care",
       "records": "Records",
-      "medicine": "Medicine"
+      "medicine": "Medicine",
+      "orders": "My orders"
     },
     "doctor": {
       "today": "Today",
@@ -605,7 +607,14 @@
       "orders": "Orders"
     },
     "hospital": {
-      "overview": "Overview"
+      "overview": "Overview",
+      "referrals": "Referrals",
+      "coordination": "Coordination"
+    },
+    "health_worker": {
+      "overview": "Worklist",
+      "patients": "Patients",
+      "referrals": "Referrals"
     }
   },
   "care": {

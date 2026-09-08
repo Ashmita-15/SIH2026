@@ -35,8 +35,26 @@ export const login = async (req, res) => {
         if (!user) return res.status(400).json({ message: 'Invalid credentials' });
         const valid = await bcrypt.compare(password, user.passwordHash);
         if (!valid) return res.status(400).json({ message: 'Invalid credentials' });
+        /**
+         * The token deliberately still carries only id, role and name.
+         *
+         * Facility membership decides what a health worker may reach, and a
+         * claim baked into a token stays true for seven days after the person
+         * has been moved somewhere else. Every check reads it from the database
+         * instead; what is returned here is for the interface to render, not
+         * for the server to trust.
+         */
         const token = jwt.sign({ id: user._id, role: user.role, name: user.name }, process.env.JWT_SECRET || 'dev_secret', { expiresIn: '7d' });
-        return res.json({ token, user: { id: user._id, role: user.role, name: user.name } });
+        return res.json({
+            token,
+            user: {
+                id: user._id,
+                role: user.role,
+                name: user.name,
+                ...(user.workerType ? { workerType: user.workerType } : {}),
+                ...(user.hospitalId ? { hospitalId: user.hospitalId } : {})
+            }
+        });
     } catch (e) {
         return res.status(500).json({ message: e.message });
     }

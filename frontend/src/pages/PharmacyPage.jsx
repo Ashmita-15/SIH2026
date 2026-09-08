@@ -1,3 +1,4 @@
+import MedicineAvailability, { guessMedicines } from '../components/medicine/MedicineAvailability'
 import React, { useEffect, useState, useCallback } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
@@ -52,7 +53,23 @@ export default function PharmacyPage() {
   }
 
   return (
-    <PageLayout title={t('pharmacy.title')} description={t('pharmacy.subtitle')}>
+    <PageLayout
+      title={t('pharmacy.title')}
+      description={t('pharmacy.subtitle')}
+      /* Order history had no link anywhere: it was reachable only straight
+         after checkout, or from the home card when an order happened to be
+         active. Once an order was delivered, the page a patient most wants —
+         "what did I order before" — could not be opened at all. */
+      actions={
+        <Link to="/patient/medicine/orders" className="btn btn-secondary btn-sm">
+          {t('nav.patient.orders', 'My orders')}
+        </Link>
+      }
+    >
+      {/* The existing "order these medicines" hand-off is untouched; this only
+          answers the question that comes first — is it anywhere near me. */}
+      {prescription && <AvailabilityPanel prescription={prescription} />}
+
       {prescription && (
         <Alert tone="info" title={t('pharmacy.fromPrescription')} className="mb-5">
           <p className="mb-2">{t('pharmacy.fromPrescriptionBody')}</p>
@@ -142,5 +159,38 @@ export default function PharmacyPage() {
         </div>
       )}
     </PageLayout>
+  )
+}
+
+/**
+ * Sits above the pharmacy list when the patient arrived from a prescription.
+ * Collapsed by default: the existing browse-and-order path stays the primary
+ * one, and this is for the trip that has not been taken yet.
+ */
+function AvailabilityPanel({ prescription }) {
+  const [open, setOpen] = React.useState(false)
+  const guesses = React.useMemo(() => guessMedicines(prescription), [prescription])
+
+  return (
+    <div className="card mb-4">
+      <div className="card-body">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="min-w-0">
+            <p className="text-small font-medium text-ink">Check availability first</p>
+            <p className="text-caption text-muted mt-0.5">
+              See which pharmacies have these before travelling.
+            </p>
+          </div>
+          <button type="button" className="btn btn-secondary btn-sm" onClick={() => setOpen(o => !o)}>
+            {open ? 'Hide' : 'Find availability'}
+          </button>
+        </div>
+        {open && (
+          <div className="mt-4">
+            <MedicineAvailability initialMedicines={guesses} />
+          </div>
+        )}
+      </div>
+    </div>
   )
 }

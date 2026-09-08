@@ -17,7 +17,8 @@
     "patient": "मरीज़",
     "doctor": "डॉक्टर",
     "pharmacy": "दवाखाना",
-    "hospital": "अस्पताल"
+    "hospital": "अस्पताल",
+    "health_worker": "स्वास्थ्य कार्यकर्ता"
   },
   "common": {
     "save": "सहेजें",
@@ -591,7 +592,8 @@
       "home": "होम",
       "care": "इलाज",
       "records": "रिकॉर्ड",
-      "medicine": "दवा"
+      "medicine": "दवा",
+      "orders": "मेरे ऑर्डर"
     },
     "doctor": {
       "today": "आज",
@@ -605,7 +607,14 @@
       "orders": "ऑर्डर"
     },
     "hospital": {
-      "overview": "सारांश"
+      "overview": "सारांश",
+      "referrals": "रेफरल",
+      "coordination": "समन्वय"
+    },
+    "health_worker": {
+      "overview": "कार्य सूची",
+      "patients": "मरीज़",
+      "referrals": "रेफरल"
     }
   },
   "care": {

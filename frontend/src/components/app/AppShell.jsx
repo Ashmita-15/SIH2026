@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react'
 import { NavLink, Link, useNavigate, useLocation } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { useAuth } from '../../context/AuthContext'
-import { navFor } from '../../config/navigation'
+import { navFor, homePathFor } from '../../config/navigation'
 import { LANGUAGES } from '../../translations/i18n'
 import Dropdown, { DropdownItem } from '../ui/Dropdown'
 import Avatar from '../ui/Avatar'
@@ -45,7 +45,7 @@ export default function AppShell({ badges = {}, children }) {
         <p className="text-small font-medium text-ink truncate">{user?.name}</p>
         <p className="text-caption text-muted">{t(`roles.${user?.role}`, user?.role)}</p>
       </div>
-      <DropdownItem onClick={() => { close(); navigate(`/${user.role}/profile`) }}>
+      <DropdownItem onClick={() => { close(); navigate(`${homePathFor(user.role)}/profile`) }}>
         {t('navbar.profile')}
       </DropdownItem>
       <div className="px-2 py-1.5">

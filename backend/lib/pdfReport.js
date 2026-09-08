@@ -131,7 +131,10 @@ function formatDate(value) {
 export function createReport({ patient, records, title, single = false }) {
     const sample = [
         patient.name, patient.village,
-        ...records.flatMap(r => [r.diagnosis, r.prescription])
+        // Notes belong here too: a health worker writing "बुखार तीन दिन से" in
+        // this field would otherwise get no Devanagari face registered and the
+        // line would vanish, which is the silent loss this module guards.
+        ...records.flatMap(r => [r.diagnosis, r.prescription, r.notes])
     ].join(' ');
 
     const doc = new PDFDocument({
@@ -250,6 +253,42 @@ function patientBlock(doc, write, width, patient) {
     doc.y = top + 58 + 18;
 }
 
+/** How a reading is written out, in the order a clinician reads them. */
+const VITAL_LABELS = [
+    ['systolic', 'BP', (v, all) => `${v}/${all.diastolic ?? '?'} mmHg`],
+    ['pulse', 'Pulse', (v) => `${v} bpm`],
+    ['temperature', 'Temp', (v) => `${v} °C`],
+    ['spo2', 'SpO2', (v) => `${v}%`],
+    ['hemoglobin', 'Hb', (v) => `${v} g/dL`],
+    ['bloodSugar', 'Glucose', (v) => `${v} mg/dL`],
+    ['weight', 'Weight', (v) => `${v} kg`]
+];
+
+function vitalsLine(vitals) {
+    if (!vitals) return '';
+    const parts = [];
+    for (const [key, label, format] of VITAL_LABELS) {
+        const value = vitals[key];
+        if (value === undefined || value === null) continue;
+        parts.push(`${label} ${format(value, vitals)}`);
+    }
+    return parts.join('   ·   ');
+}
+
+/** Codes are what the record stores; this is only for reading aloud on paper. */
+const SIGN_LABELS = {
+    severe_hypertension: 'Very high blood pressure',
+    raised_blood_pressure: 'Raised blood pressure',
+    severe_hypoxia: 'Very low oxygen',
+    low_oxygen: 'Low oxygen',
+    high_fever: 'High fever',
+    hypothermia: 'Body temperature too low',
+    hypoglycaemia: 'Very low blood sugar',
+    very_high_glucose: 'Very high blood sugar',
+    severe_anaemia: 'Severe anaemia',
+    fast_pulse: 'Fast pulse'
+};
+
 function recordBlock(doc, write, width, record, index) {
     const doctor = record.appointmentId?.doctorId;
 
@@ -262,14 +301,40 @@ function recordBlock(doc, write, width, record, index) {
     );
     doc.y = top + 16;
 
-    if (doctor?.name) {
-        write(`Seen by ${doctor.name}${doctor.specialization ? ` · ${doctor.specialization}` : ''}`,
-              { size: 9.5, color: MUTED, x: PAGE.margin + 14, width: width - 14 });
+    /**
+     * Who saw the patient. A home visit has no appointment and therefore no
+     * doctor on it — attributing it to one would be wrong, and leaving it
+     * blank made the record look like it came from nowhere.
+     */
+    const author = record.authorId;
+    const seenBy = doctor?.name
+        ? `Seen by ${doctor.name}${doctor.specialization ? ` · ${doctor.specialization}` : ''}`
+        : author?.name
+            ? `Seen by ${author.name}${author.workerType ? ` · ${author.workerType.toUpperCase()}` : ''}` +
+              `${record.facilityId?.name ? ` · ${record.facilityId.name}` : ''}`
+            : null;
+
+    if (seenBy) {
+        write(seenBy, { size: 9.5, color: MUTED, x: PAGE.margin + 14, width: width - 14 });
     }
 
     doc.y += 8;
-    section(doc, write, width, 'Diagnosis', record.diagnosis);
+
+    const vitals = vitalsLine(record.vitals);
+    if (vitals) section(doc, write, width, 'Measurements', vitals);
+
+    if (record.dangerSigns?.length) {
+        section(doc, write, width, 'Danger signs noted',
+            record.dangerSigns.map(c => SIGN_LABELS[c] || c).join(', '));
+    }
+
+    // A visit by a health worker carries no diagnosis by design, so an empty
+    // "Diagnosis: —" would misrepresent it as an incomplete consultation.
+    if (record.diagnosis || (!vitals && !record.notes)) {
+        section(doc, write, width, 'Diagnosis', record.diagnosis);
+    }
     if (record.prescription) section(doc, write, width, 'Prescription', record.prescription);
+    if (record.notes) section(doc, write, width, 'Notes', record.notes);
 }
 
 function section(doc, write, width, label, value) {

@@ -1,5 +1,7 @@
 import Pharmacy from '../models/Pharmacy.js';
 import MedicineStock from '../models/MedicineStock.js';
+import { findAvailability } from '../services/availabilityService.js';
+import { sendError } from '../services/errors.js';
 import Cart from '../models/Cart.js';
 import Order from '../models/Order.js';
 
@@ -265,16 +267,23 @@ export const getPharmacyMedicinesPublic = async (req, res) => {
     }
 };
 
+/**
+ * Where a medicine is stocked.
+ *
+ * Returned the whole MedicineStock document, unauthenticated — exact
+ * quantities, batch numbers, expiry dates and margins for every pharmacy in
+ * the system. It also matched only on an exact name, so a prescription for
+ * "Amlodipine 5mg" found nothing at a shop stocking it under a brand.
+ *
+ * Now shares the availability projection: a category rather than a count, and
+ * a loose match so the answer is useful.
+ */
 export const checkStock = async (req, res) => {
     try {
         const { medicineName } = req.params;
-        const stocks = await MedicineStock.find({ 
-            medicineName: new RegExp(`^${medicineName}$`, 'i'),
-            isActive: true
-        }).populate('pharmacyId', 'name location contact address');
-        res.json(stocks);
+        res.json(await findAvailability(medicineName));
     } catch (e) {
-        res.status(500).json({ message: e.message });
+        sendError(res, e);
     }
 };
 

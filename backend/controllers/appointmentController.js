@@ -1,6 +1,36 @@
 import Appointment from '../models/Appointment.js';
 import { SLOTS, isValidSlot } from '../config/slots.js';
 
+/**
+ * Confirming, rejecting and completing all took the appointment id straight
+ * from the URL and wrote to it, so any signed-in account could accept or
+ * decline any doctor's appointments by editing the address bar. The doctor
+ * named on the appointment is the only one who may act on it.
+ */
+async function doctorsOwnAppointment(req, res, id) {
+    const appointment = await Appointment.findById(id);
+    if (!appointment) {
+        res.status(404).json({ message: 'Appointment not found' });
+        return null;
+    }
+    if (String(appointment.doctorId) !== String(req.user.id)) {
+        res.status(403).json({ message: 'This is not your appointment' });
+        return null;
+    }
+    return appointment;
+}
+
+/**
+ * What an assisted consultation adds to the doctor's view: the health worker
+ * who examined the patient, the facility they work from, and the encounter
+ * itself — vitals and danger signs included.
+ */
+const ASSISTED_POPULATE = [
+    { path: 'assistedBy', select: 'name workerType phone' },
+    { path: 'assistedFacilityId', select: 'name level phone' },
+    { path: 'encounterId', select: 'type occurredAt vitals dangerSigns notes' }
+];
+
 export const bookAppointment = async (req, res) => {
     try {
         const { patientId, doctorId, requestedDate, symptoms, consultationType, timeSlot } = req.body;
@@ -80,6 +110,7 @@ export const getAppointmentsForPatient = async (req, res) => {
         const { id } = req.params;
         const appointments = await Appointment.find({ patientId: id })
             .populate('doctorId', 'name specialization qualification availability')
+            .populate(ASSISTED_POPULATE)
             .sort({ createdAt: -1 });
         res.json(appointments);
     } catch (e) {
@@ -91,7 +122,8 @@ export const getAppointmentsForDoctor = async (req, res) => {
     try {
         const { id } = req.params;
         const appointments = await Appointment.find({ doctorId: id })
-            .populate('patientId', 'name age village email')
+            .populate('patientId', 'name age village email phone')
+            .populate(ASSISTED_POPULATE)
             .sort({ createdAt: -1 });
         res.json(appointments);
     } catch (e) {
@@ -105,8 +137,8 @@ export const confirmAppointment = async (req, res) => {
         const { id } = req.params; // appointment ID
         const { doctorNotes } = req.body;
 
-        const requested = await Appointment.findById(id);
-        if (!requested) return res.status(404).json({ message: 'Appointment not found' });
+        const requested = await doctorsOwnAppointment(req, res, id);
+        if (!requested) return;
 
         /**
          * Accepting what the patient asked for is the common case, so the
@@ -165,7 +197,9 @@ export const rejectAppointment = async (req, res) => {
     try {
         const { id } = req.params; // appointment ID
         const { rejectionReason } = req.body;
-        
+
+        if (!await doctorsOwnAppointment(req, res, id)) return;
+
         const appointment = await Appointment.findByIdAndUpdate(
             id,
             {
@@ -194,7 +228,9 @@ export const completeAppointment = async (req, res) => {
     try {
         const { id } = req.params; // appointment ID
         const { doctorNotes } = req.body;
-        
+
+        if (!await doctorsOwnAppointment(req, res, id)) return;
+
         const appointment = await Appointment.findByIdAndUpdate(
             id,
             {

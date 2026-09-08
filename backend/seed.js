@@ -15,6 +15,26 @@ const run = async () => {
     await Pharmacy.deleteMany({});
     await MedicineStock.deleteMany({});
 
+    /**
+     * Reconcile indexes with the schemas before inserting anything.
+     *
+     * deleteMany drops documents but never indexes, so an index left behind by
+     * an older version of a schema survives every reseed. The hospitals
+     * collection carried a unique index on a `gmail` field that no longer
+     * exists; since no document has that field they all indexed as null, and a
+     * non-sparse unique index treats those nulls as duplicates — which quietly
+     * capped the collection at exactly one hospital. It never showed up while
+     * the seed created a single hospital, and broke the moment it created a
+     * network.
+     *
+     * syncIndexes drops what the schema no longer declares and builds what it
+     * does, so this cannot recur as models are added.
+     */
+    for (const model of [User, Hospital, Pharmacy, MedicineStock]) {
+        const dropped = await model.syncIndexes();
+        if (dropped?.length) console.log(`Dropped stale ${model.modelName} indexes:`, dropped.join(', '));
+    }
+
     const pw = await bcrypt.hash('password123', 10);
 
     // Create users
@@ -364,6 +384,203 @@ const run = async () => {
         await MedicineStock.create({ ...med, pharmacyId: pharmacy2._id });
     }
 
+    // ─────────────────────────────────────────────────────────────────────
+    // The care network.
+    //
+    // A patient does not move between "hospitals", they move up a chain:
+    // sub-centre → PHC → CHC → district hospital. Apollo already existed and
+    // sits at the top of that chain rather than beside it, so the existing
+    // hospital login now owns a real network instead of a lone building.
+    //
+    // Capabilities are deliberately uneven. Obstetrics exists only at the
+    // district hospital and ultrasound only above the PHC, which is what makes
+    // a referral necessary at all — a network where every node can do
+    // everything has nothing to coordinate.
+    // ─────────────────────────────────────────────────────────────────────
+
+    hospital.level = 'district_hospital';
+    hospital.parentFacilityId = null;
+    hospital.operatingDays = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];
+    hospital.capabilities = [
+        'general_opd', 'teleconsultation', 'anc', 'immunization', 'essential_drugs',
+        'lab_basic', 'lab_advanced', 'xray', 'ultrasound', 'obstetrics',
+        'pediatrics', 'surgery', 'inpatient', 'emergency_24x7', 'ambulance', 'blood_bank'
+    ];
+    await hospital.save();
+
+    const WEEKDAYS = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
+
+    // parent is a key from earlier in this list, so the tree builds in one pass.
+    const networkDefs = [
+        {
+            key: 'chc', name: 'CHC Sundarpur', level: 'chc', parent: null,
+            email: 'chc.sundarpur@gramsathi.in', phone: '+91-9812300001',
+            address: 'Sundarpur Road, Block Sundarpur, District Ludhiana, Punjab - 141002',
+            coordinates: [75.7900, 30.8600],
+            operatingDays: [...WEEKDAYS, 'sun'],
+            capabilities: [
+                'general_opd', 'teleconsultation', 'anc', 'immunization', 'essential_drugs',
+                'lab_basic', 'lab_advanced', 'xray', 'pediatrics', 'inpatient',
+                'emergency_24x7', 'ambulance'
+            ]
+        },
+        {
+            key: 'phcRampur', name: 'PHC Rampur', level: 'phc', parent: 'chc',
+            email: 'phc.rampur@gramsathi.in', phone: '+91-9812300002',
+            address: 'Village Rampur, Block Sundarpur, District Ludhiana, Punjab - 141013',
+            coordinates: [75.7200, 30.8200],
+            operatingDays: WEEKDAYS,
+            capabilities: ['general_opd', 'teleconsultation', 'anc', 'immunization', 'essential_drugs', 'lab_basic']
+        },
+        {
+            // No teleconsultation here on purpose: an uneven network is the
+            // realistic one, and it gives the dashboards something true to show.
+            key: 'phcBhagwanpur', name: 'PHC Bhagwanpur', level: 'phc', parent: 'chc',
+            email: 'phc.bhagwanpur@gramsathi.in', phone: '+91-9812300003',
+            address: 'Village Bhagwanpur, Block Sundarpur, District Ludhiana, Punjab - 141014',
+            coordinates: [75.8300, 30.7900],
+            operatingDays: ['mon', 'wed', 'fri'],
+            capabilities: ['general_opd', 'anc', 'immunization', 'essential_drugs', 'lab_basic']
+        },
+        {
+            key: 'scRampurKhurd', name: 'Sub-Centre Rampur Khurd', level: 'sub_centre', parent: 'phcRampur',
+            email: 'sc.rampurkhurd@gramsathi.in', phone: '+91-9812300004',
+            address: 'Village Rampur Khurd, Block Sundarpur, District Ludhiana, Punjab - 141013',
+            coordinates: [75.6900, 30.8000],
+            operatingDays: WEEKDAYS,
+            capabilities: ['anc', 'immunization', 'essential_drugs']
+        },
+        {
+            key: 'scKotla', name: 'Sub-Centre Kotla', level: 'sub_centre', parent: 'phcRampur',
+            email: 'sc.kotla@gramsathi.in', phone: '+91-9812300005',
+            address: 'Village Kotla, Block Sundarpur, District Ludhiana, Punjab - 141013',
+            coordinates: [75.7400, 30.7800],
+            operatingDays: WEEKDAYS,
+            capabilities: ['anc', 'immunization', 'essential_drugs']
+        },
+        {
+            key: 'scBhagwanpur', name: 'Sub-Centre Bhagwanpur', level: 'sub_centre', parent: 'phcBhagwanpur',
+            email: 'sc.bhagwanpur@gramsathi.in', phone: '+91-9812300006',
+            address: 'Village Bhagwanpur, Block Sundarpur, District Ludhiana, Punjab - 141014',
+            coordinates: [75.8600, 30.7600],
+            operatingDays: WEEKDAYS,
+            capabilities: ['anc', 'immunization', 'essential_drugs']
+        }
+    ];
+
+    // Each facility gets its own admin account. getHospitalProfile looks a
+    // facility up with findOne({ ownerId }), so one owner must map to exactly
+    // one facility or the existing hospital dashboard picks an arbitrary one.
+    const facilities = { apollo: hospital };
+
+    for (const def of networkDefs) {
+        const admin = await User.create({
+            name: `${def.name} In-charge`,
+            email: def.email,
+            passwordHash: pw,
+            role: 'hospital',
+            phone: def.phone
+        });
+
+        const facility = await Hospital.create({
+            name: def.name,
+            email: def.email,
+            phone: def.phone,
+            address: def.address,
+            location: { type: 'Point', coordinates: def.coordinates },
+            level: def.level,
+            capabilities: def.capabilities,
+            operatingDays: def.operatingDays,
+            parentFacilityId: def.parent ? facilities[def.parent]._id : hospital._id,
+            description: `Public health facility under Block Sundarpur, District Ludhiana.`,
+            ownerId: admin._id
+        });
+
+        await User.findByIdAndUpdate(admin._id, { hospitalId: facility._id });
+        facilities[def.key] = facility;
+    }
+
+    // A medical officer at the PHC. Without a doctor at the primary tier the
+    // chain has no one to consult before referring upward.
+    const phcDoctor = await User.create({
+        name: 'Dr. Amrit Singh',
+        email: 'amrit@gramsathi.in',
+        passwordHash: pw,
+        role: 'doctor',
+        specialization: 'General Medicine',
+        qualification: 'MBBS',
+        availability: '9am-2pm',
+        phone: '+91-9812300010',
+        hospitalId: facilities.phcRampur._id
+    });
+    facilities.phcRampur.doctors = [phcDoctor._id];
+    await facilities.phcRampur.save();
+
+    // Health workers. The catchment is the point: it is what will scope their
+    // patient list, their worklist, and eventually what their phone holds
+    // offline. Villages here match the addresses above, including Sundarpur,
+    // where the existing seeded patient lives.
+    const workerDefs = [
+        {
+            name: 'Sunita Devi', email: 'sunita@gramsathi.in', workerType: 'asha',
+            facility: 'scRampurKhurd', villages: ['Rampur Khurd', 'Nangal'], phone: '+91-9812300021'
+        },
+        {
+            name: 'Preeti Kaur', email: 'preeti@gramsathi.in', workerType: 'asha',
+            facility: 'scKotla', villages: ['Kotla', 'Jhande'], phone: '+91-9812300022'
+        },
+        {
+            name: 'Manjeet Kaur', email: 'manjeet@gramsathi.in', workerType: 'asha',
+            facility: 'scBhagwanpur', villages: ['Bhagwanpur', 'Sundarpur'], phone: '+91-9812300023'
+        },
+        {
+            name: 'Harpreet Kaur', email: 'harpreet@gramsathi.in', workerType: 'anm',
+            facility: 'scRampurKhurd', villages: ['Rampur Khurd', 'Nangal', 'Dhandari'], phone: '+91-9812300024'
+        },
+        {
+            name: 'Gurpreet Singh', email: 'gurpreet@gramsathi.in', workerType: 'cho',
+            facility: 'phcRampur',
+            villages: ['Rampur Khurd', 'Nangal', 'Dhandari', 'Kotla', 'Jhande', 'Barewal'],
+            phone: '+91-9812300025'
+        }
+    ];
+
+    /**
+     * Village patients, one per catchment.
+     *
+     * Registered the way a health worker registers someone at their door: no
+     * real email address and no chosen password, so the record exists without
+     * being an account anybody can sign into. Placed in different catchments
+     * deliberately — a boundary with everyone on one side of it is untested.
+     */
+    const villagePatients = [
+        { name: 'Kamla Devi', age: 26, gender: 'female', village: 'Rampur Khurd', phone: '+91-9812311001' },
+        { name: 'Ramesh Lal', age: 54, gender: 'male', village: 'Nangal', phone: '+91-9812311002' },
+        { name: 'Geeta Rani', age: 31, gender: 'female', village: 'Kotla', phone: '+91-9812311003' }
+    ];
+    for (const p of villagePatients) {
+        await User.create({
+            ...p,
+            email: `gs-seed-${p.name.toLowerCase().replace(/\s+/g, '')}@patient.gramsathi.local`,
+            passwordHash: await bcrypt.hash(`${Math.random()}${Date.now()}`, 10),
+            role: 'patient'
+        });
+    }
+
+    const workers = [];
+    for (const def of workerDefs) {
+        workers.push(await User.create({
+            name: def.name,
+            email: def.email,
+            passwordHash: pw,
+            role: 'health_worker',
+            workerType: def.workerType,
+            phone: def.phone,
+            hospitalId: facilities[def.facility]._id,
+            catchmentVillages: def.villages
+        }));
+    }
+
     console.log('Seeded successfully:');
     console.log('- Patient:', patient.email, '(password: password123)');
     console.log('- Doctor:', doctor.email, '(password: password123)');
@@ -376,11 +593,29 @@ const run = async () => {
     console.log('- Medicines for Pharmacy 1:', medicines.length, 'items created');
     console.log('- Medicines for Pharmacy 2:', hospitalPharmacyMedicines.length, 'items created');
     console.log('');
+    console.log('Care network (all passwords: password123):');
+    console.log(`  ${hospital.name} [district_hospital] — ${hospitalUser.email}`);
+    for (const def of networkDefs) {
+        const f = facilities[def.key];
+        const parentName = f.parentFacilityId ? Object.values(facilities).find(x => String(x._id) === String(f.parentFacilityId))?.name : '—';
+        console.log(`    ${f.name} [${f.level}] under ${parentName} — ${f.email}`);
+    }
+    console.log('');
+    console.log('Health workers:');
+    for (const w of workers) {
+        console.log(`  ${w.name} (${w.workerType}) — ${w.email} — villages: ${w.catchmentVillages.join(', ')}`);
+    }
+    console.log(`  PHC medical officer: ${phcDoctor.email}`);
+    console.log('');
+    console.log('Village patients (records, not logins):');
+    for (const p of villagePatients) console.log(`  ${p.name}, ${p.age} — ${p.village}`);
+    console.log('');
     console.log('You can now:');
     console.log('1. Login as pharmacy owner to manage inventory');
     console.log('2. Login as patient to browse and order medicines');
     console.log('3. Test the complete e-commerce flow');
-    
+    console.log('4. GET /api/facilities/tree to see the care network');
+
     process.exit(0);
 };
 

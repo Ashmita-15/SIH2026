@@ -3,13 +3,23 @@ import { Link, NavLink, useNavigate, useLocation } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { useAuth } from '../context/AuthContext'
 import { LANGUAGES } from '../translations/i18n'
+import { homePathFor } from '../config/navigation'
 import Dropdown, { DropdownItem } from './ui/Dropdown'
 import Avatar from './ui/Avatar'
 
 /** One nav config, rendered at both breakpoints — the mobile menu used to
  *  silently drop the Dashboard link, stranding logged-in phone users. */
 function navLinksFor(role, t) {
-  const dashboard = { to: `/${role}`, label: t('navbar.dashboard') }
+  /**
+   * Built with homePathFor rather than the role name.
+   *
+   * Every other role's path happens to equal its name, so interpolating the
+   * role worked by coincidence until health_worker arrived: it produced
+   * /health_worker, which matches no route, so the link landed on the
+   * not-found page — which renders this same navbar, so clicking Dashboard
+   * from there went straight back to it and the worker was stuck in a loop.
+   */
+  const dashboard = { to: homePathFor(role), label: t('navbar.dashboard') }
   switch (role) {
     case 'patient':
       return [
@@ -21,6 +31,7 @@ function navLinksFor(role, t) {
       return [dashboard, { to: '/doctor/patients', label: t('navbar.patients') }]
     case 'pharmacy':
     case 'hospital':
+    case 'health_worker':
       return [dashboard]
     default:
       return []
@@ -64,7 +75,7 @@ export default function Navbar() {
             <NavLink
               key={l.to}
               to={l.to}
-              end={l.to === `/${user?.role}`}
+              end={l.to === homePathFor(user?.role)}
               className={({ isActive }) =>
                 `px-3 py-2 rounded-control text-small font-medium transition-colors ${
                   isActive ? 'text-primary-600 bg-primary-50' : 'text-body hover:text-ink hover:bg-surface-2'
@@ -105,10 +116,10 @@ export default function Navbar() {
                     <p className="text-small font-medium text-ink truncate">{user.name}</p>
                     <p className="text-caption text-muted capitalize">{t(`roles.${user.role}`, user.role)}</p>
                   </div>
-                  <DropdownItem onClick={() => { close(); navigate(`/${user.role}`) }}>
+                  <DropdownItem onClick={() => { close(); navigate(homePathFor(user.role)) }}>
                     {t('navbar.dashboard')}
                   </DropdownItem>
-                  <DropdownItem onClick={() => { close(); navigate(`/${user.role}/profile`) }}>
+                  <DropdownItem onClick={() => { close(); navigate(`${homePathFor(user.role)}/profile`) }}>
                     {t('navbar.profile')}
                   </DropdownItem>
                   <div className="divider my-1.5" />
@@ -154,7 +165,7 @@ export default function Navbar() {
               <NavLink
                 key={l.to}
                 to={l.to}
-                end={l.to === `/${user?.role}`}
+                end={l.to === homePathFor(user?.role)}
                 className={({ isActive }) =>
                   `px-3 py-3 rounded-control text-base font-medium min-h-touch flex items-center ${
                     isActive ? 'text-primary-600 bg-primary-50' : 'text-body hover:bg-surface-2'

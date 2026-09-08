@@ -7,11 +7,18 @@ import dotenv from 'dotenv';
 import connectDB from './config/db.js';
 import { attachSocketIO } from './middleware/socketMiddleware.js';
 import authRoutes from './routes/authRoutes.js';
+import agentRoutes from './routes/agentRoutes.js';
 import appointmentRoutes from './routes/appointmentRoutes.js';
 import assistantRoutes from './routes/assistantRoutes.js';
+import facilityRoutes from './routes/facilityRoutes.js';
 import healthRecordRoutes from './routes/healthRecordRoutes.js';
+import healthWorkerRoutes from './routes/healthWorkerRoutes.js';
 import hospitalRoutes from './routes/hospitalRoutes.js';
+import { timelineRouter, facilityRouter, medicineRouter } from './routes/insightsRoutes.js';
 import pharmacyRoutes from './routes/pharmacyRoutes.js';
+import recommendationRoutes from './routes/recommendationRoutes.js';
+import referralRoutes from './routes/referralRoutes.js';
+import taskRoutes from './routes/taskRoutes.js';
 import symptomCheckerRoutes from './routes/symptomCheckerRoutes.js';
 import userRoutes from './routes/userRoutes.js';
 
@@ -57,10 +64,19 @@ app.use(attachSocketIO(io)); // Attach socket.io to requests
 
 // Routes
 app.use('/api/auth', authRoutes);
+app.use('/api/agents', agentRoutes);
 app.use('/api/appointments', appointmentRoutes);
+app.use('/api/facilities', facilityRoutes);
 app.use('/api/records', healthRecordRoutes);
+app.use('/api/health-worker', healthWorkerRoutes);
 app.use('/api/hospital', hospitalRoutes);
+app.use('/api/patients', timelineRouter);
+app.use('/api/facility', facilityRouter);
+app.use('/api/medicines', medicineRouter);
 app.use('/api/pharmacy', pharmacyRoutes);
+app.use('/api/agent-recommendations', recommendationRoutes);
+app.use('/api/referrals', referralRoutes);
+app.use('/api/tasks', taskRoutes);
 app.use('/api/symptom-checker', symptomCheckerRoutes);
 app.use('/api/users', userRoutes);
 

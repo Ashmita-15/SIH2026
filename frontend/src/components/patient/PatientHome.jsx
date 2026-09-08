@@ -26,15 +26,16 @@ export default function PatientHome() {
   const { userId, user } = useAuth()
   const navigate = useNavigate()
 
-  const [data, setData] = useState({ appointment: null, record: null, order: null })
+  const [data, setData] = useState({ appointment: null, record: null, order: null, referral: null })
   const [loading, setLoading] = useState(true)
 
   const load = useCallback(async () => {
     if (!userId) return
-    const [appointments, records, orders] = await Promise.allSettled([
+    const [appointments, records, orders, referrals] = await Promise.allSettled([
       api.get(`/appointments/patient/${userId}`),
       api.get(`/records/${userId}`),
-      api.get('/pharmacy/my/patient-orders')
+      api.get('/pharmacy/my/patient-orders'),
+      api.get('/referrals')
     ])
 
     const upcoming = appointments.status === 'fulfilled'
@@ -48,6 +49,13 @@ export default function PatientHome() {
       record: records.status === 'fulfilled' ? (records.value.data || [])[0] : null,
       order: orders.status === 'fulfilled'
         ? (orders.value.data?.orders || []).find(o => !['delivered', 'cancelled'].includes(o.status))
+        : null,
+      // The one referral still in progress. A patient needs to know where they
+      // have been asked to go and whether the hospital is expecting them —
+      // the two things a paper slip never tells them.
+      referral: referrals.status === 'fulfilled'
+        ? (referrals.value.data || []).find(r =>
+            !['completed', 'declined', 'lapsed', 'redirected'].includes(r.status))
         : null
     })
     setLoading(false)
@@ -82,6 +90,52 @@ export default function PatientHome() {
           ))}
         </div>
       </section>
+
+      {/* Shown above the rest when it exists: being told to go to a hospital
+          is the most consequential thing in a patient's list, and the status
+          is the part a paper slip can never carry. */}
+      {data.referral && (
+        <section className="mb-4">
+          <div className="card">
+            <div className="card-body">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="text-caption text-muted mb-1">You have been referred</p>
+                  <p className="text-ink font-medium">{data.referral.toFacilityId?.name}</p>
+                  <p className="text-small text-muted mt-0.5">{data.referral.reason}</p>
+                  {data.referral.toFacilityId?.address && (
+                    <p className="text-caption text-muted mt-1">{data.referral.toFacilityId.address}</p>
+                  )}
+                  {data.referral.scheduledFor && (
+                    <p className="text-small text-ink mt-2">
+                      Appointment: {new Date(data.referral.scheduledFor).toLocaleString('en-IN', {
+                        day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit'
+                      })}
+                    </p>
+                  )}
+                  {data.referral.requiredTests?.length > 0 && (
+                    <p className="text-small text-body mt-1.5">
+                      <span className="text-muted">Take these test results with you: </span>
+                      {data.referral.requiredTests.join(', ')}
+                    </p>
+                  )}
+                </div>
+                <span className={`badge ${
+                  data.referral.status === 'created' ? 'badge-neutral' : 'badge-info'
+                }`}>
+                  {String(data.referral.status).replace(/_/g, ' ')}
+                </span>
+              </div>
+              {data.referral.toFacilityId?.phone && (
+                <a href={`tel:${data.referral.toFacilityId.phone}`}
+                   className="btn btn-secondary btn-sm mt-3 inline-flex">
+                  Call {data.referral.toFacilityId.name}
+                </a>
+              )}
+            </div>
+          </div>
+        </section>
+      )}
 
       <div className="grid gap-4 sm:grid-cols-2">
         <MiniCard

@@ -41,10 +41,31 @@ const NAV = {
     { key: 'orders',    to: '/pharmacy/orders',    icon: ICONS.orders, labelKey: 'nav.pharmacy.orders' }
   ],
   hospital: [
-    { key: 'overview', to: '/hospital', icon: ICONS.building, labelKey: 'nav.hospital.overview', end: true }
+    { key: 'overview', to: '/hospital', icon: ICONS.building, labelKey: 'nav.hospital.overview', end: true },
+    { key: 'referrals', to: '/hospital/referrals', icon: ICONS.inbox, labelKey: 'nav.hospital.referrals' },
+    { key: 'coordination', to: '/hospital/coordination', icon: ICONS.care, labelKey: 'nav.hospital.coordination' }
+  ],
+  health_worker: [
+    { key: 'overview', to: '/health-worker', icon: ICONS.today, labelKey: 'nav.health_worker.overview', end: true },
+    { key: 'patients', to: '/health-worker/patients', icon: ICONS.patients, labelKey: 'nav.health_worker.patients' },
+    { key: 'referrals', to: '/health-worker/referrals', icon: ICONS.inbox, labelKey: 'nav.health_worker.referrals' }
   ]
 }
 
 export function navFor(role) {
   return NAV[role] || []
+}
+
+/**
+ * Where a role's app area lives.
+ *
+ * Every other role's path happens to equal its name, so both the route guard
+ * and the account menu built one by interpolation. health_worker breaks that:
+ * the role carries an underscore and the URL should not, so the mapping needs
+ * somewhere to live rather than being spelled out at each call site.
+ */
+const HOME_PATHS = { health_worker: '/health-worker' }
+
+export function homePathFor(role) {
+  return HOME_PATHS[role] || `/${role}`
 }

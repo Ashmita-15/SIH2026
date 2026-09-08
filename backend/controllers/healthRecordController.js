@@ -52,6 +52,11 @@ export const getRecordsForPatient = async (req, res) => {
                 path: 'appointmentId',
                 populate: { path: 'doctorId', select: 'name specialization' }
             })
+            // A visit recorded by a health worker has no appointment, so the
+            // doctor on the appointment is not who saw the patient. Without
+            // the author, every home visit would be shown as "unknown doctor".
+            .populate('authorId', 'name role workerType specialization')
+            .populate('facilityId', 'name level')
             .sort({ createdAt: -1 });
         res.json(records);
     } catch (e) {

@@ -5,6 +5,7 @@ import AppShell from './components/app/AppShell.jsx'
 import EmergencyButton from './components/EmergencyButton.jsx'
 import AssistantLauncher from './components/patient/Assistant/AssistantLauncher.jsx'
 import { useAuth } from './context/AuthContext.jsx'
+import { homePathFor } from './config/navigation.js'
 import api from './services/api.js'
 import { Loading } from './components/ui/States.jsx'
 
@@ -15,6 +16,7 @@ const PatientDashboard  = lazy(() => import('./pages/PatientDashboard.jsx'))
 const DoctorDashboard   = lazy(() => import('./pages/DoctorDashboard.jsx'))
 const HospitalDashboard = lazy(() => import('./pages/HospitalDashboard.jsx'))
 const PharmacyDashboard = lazy(() => import('./pages/PharmacyDashboard.jsx'))
+const HealthWorkerDashboard = lazy(() => import('./pages/HealthWorkerDashboard.jsx'))
 
 function NotFound() {
   return (
@@ -47,7 +49,7 @@ function PrivateRoute({ children, roles }) {
     return <Navigate to="/login" state={{ from: location.pathname }} replace />
   }
   if (roles && !roles.includes(user.role)) {
-    return <Navigate to={`/${user.role}`} replace />
+    return <Navigate to={homePathFor(user.role)} replace />
   }
   return children
 }
@@ -121,6 +123,7 @@ export default function App() {
         <Route path="/doctor/*"   element={<AppArea roles={['doctor']}><DoctorDashboard /></AppArea>} />
         <Route path="/pharmacy/*" element={<AppArea roles={['pharmacy']}><PharmacyDashboard /></AppArea>} />
         <Route path="/hospital/*" element={<AppArea roles={['hospital']}><HospitalDashboard /></AppArea>} />
+        <Route path="/health-worker/*" element={<AppArea roles={['health_worker']}><HealthWorkerDashboard /></AppArea>} />
 
         {/* Previous top-level patient routes. */}
         <Route path="/doctors" element={<Navigate to="/patient/care/doctors" replace />} />

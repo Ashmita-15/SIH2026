@@ -2,6 +2,8 @@ import React, { lazy, Suspense } from 'react'
 import { Routes, Route, Navigate, useNavigate, useParams, useLocation } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import Page from '../components/app/Page'
+import PatientTimeline from '../components/timeline/PatientTimeline'
+import { useAuth } from '../context/AuthContext'
 import PatientHome from '../components/patient/PatientHome'
 import CarePage from '../components/patient/CarePage'
 import BookingForm from '../components/patient/BookingForm'
@@ -34,6 +36,7 @@ export default function PatientDashboard() {
       <Route path="care/call/:appointmentId" element={<CallRoute />} />
 
       <Route path="records" element={<RecordsRoute />} />
+      <Route path="timeline" element={<TimelineRoute />} />
 
       {/* Medicine — browsing, cart, checkout and orders as one destination. */}
       <Route path="medicine" element={<PharmacyPage />} />
@@ -89,9 +92,41 @@ function BookRoute() {
 
 function RecordsRoute() {
   const { t } = useTranslation()
+  const navigate = useNavigate()
   return (
-    <Page title={t('records.title')} description={t('records.subtitle')}>
+    <Page
+      title={t('records.title')}
+      description={t('records.subtitle')}
+      tabs={[{ key: 'records', label: t('records.title') }, { key: 'timeline', label: 'My journey' }]}
+      activeTab="records"
+      onTabChange={(k) => k === 'timeline' && navigate('/patient/timeline')}
+    >
       <HealthRecords />
+    </Page>
+  )
+}
+
+/**
+ * The same records, plus everything else that happened, in order.
+ *
+ * A patient's care is not only the notes a doctor typed — it is also the visit
+ * an ASHA made, the referral they were given and whether the hospital ever
+ * answered it. Those exist in the system already and were simply never shown
+ * to the person they are about.
+ */
+function TimelineRoute() {
+  const { t } = useTranslation()
+  const navigate = useNavigate()
+  const { userId } = useAuth()
+  return (
+    <Page
+      title="My health journey"
+      description="Everything recorded about your care, most recent first."
+      tabs={[{ key: 'records', label: t('records.title') }, { key: 'timeline', label: 'My journey' }]}
+      activeTab="timeline"
+      onTabChange={(k) => k === 'records' && navigate('/patient/records')}
+    >
+      {userId && <PatientTimeline patientId={userId} />}
     </Page>
   )
 }
