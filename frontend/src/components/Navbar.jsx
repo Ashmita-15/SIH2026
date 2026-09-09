@@ -6,6 +6,7 @@ import { LANGUAGES } from '../translations/i18n'
 import { homePathFor } from '../config/navigation'
 import Dropdown, { DropdownItem } from './ui/Dropdown'
 import Avatar from './ui/Avatar'
+import logo from '../assets/images/logo.png'
 
 /** One nav config, rendered at both breakpoints — the mobile menu used to
  *  silently drop the Dashboard link, stranding logged-in phone users. */
@@ -44,9 +45,18 @@ export default function Navbar() {
   const { t, i18n } = useTranslation()
   const { user, isAuthenticated, logout } = useAuth()
   const [mobileOpen, setMobileOpen] = useState(false)
+  const [scrolled, setScrolled] = useState(false)
 
   // Close the menu on navigation, otherwise it hangs over the new page.
   useEffect(() => { setMobileOpen(false) }, [location.pathname])
+
+  // Track scroll position so we can switch between transparent and solid.
+  useEffect(() => {
+    const onScroll = () => setScrolled(window.scrollY > 10)
+    window.addEventListener('scroll', onScroll, { passive: true })
+    onScroll()
+    return () => window.removeEventListener('scroll', onScroll)
+  }, [])
 
   const handleLogout = () => {
     logout()
@@ -57,16 +67,22 @@ export default function Navbar() {
   const links = isAuthenticated ? navLinksFor(user.role, t) : []
   const current = LANGUAGES.find(l => l.code === i18n.language) || LANGUAGES[0]
 
+  // Transparent only on the landing page before the user scrolls.
+  const isLanding = location.pathname === '/'
+  const transparent = isLanding && !scrolled && !mobileOpen
+
   return (
-    <header className="bg-surface border-b border-line sticky top-0 z-40">
+    <header
+      className={`sticky top-0 z-40 transition-all duration-300 ${
+        transparent
+          ? 'bg-transparent border-b border-transparent'
+          : 'bg-surface border-b border-line shadow-sm'
+      }`}
+    >
       <nav className="container-app flex items-center justify-between gap-4 h-16" aria-label="Main">
         <Link to="/" className="flex items-center gap-2.5 shrink-0 rounded-control" aria-label="GramSathi home">
-          <span className="w-9 h-9 rounded-control bg-primary-600 text-white flex items-center justify-center" aria-hidden="true">
-            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v12M6 12h12" />
-            </svg>
-          </span>
-          <span className="font-semibold text-ink text-h3 tracking-tight">GramSathi</span>
+          <img src={logo} alt="GramSathi Logo" className="w-9 h-9 object-contain rounded-lg shrink-0" />
+          <span className={`font-semibold text-h3 tracking-tight transition-colors duration-300 ${transparent ? 'text-white' : 'text-ink'}`}>GramSathi</span>
         </Link>
 
         {/* Desktop */}
@@ -78,7 +94,9 @@ export default function Navbar() {
               end={l.to === homePathFor(user?.role)}
               className={({ isActive }) =>
                 `px-3 py-2 rounded-control text-small font-medium transition-colors ${
-                  isActive ? 'text-primary-600 bg-primary-50' : 'text-body hover:text-ink hover:bg-surface-2'
+                  isActive
+                    ? transparent ? 'text-white bg-white/20' : 'text-primary-600 bg-primary-50'
+                    : transparent ? 'text-white/85 hover:text-white hover:bg-white/15' : 'text-body hover:text-ink hover:bg-surface-2'
                 }`
               }
             >
@@ -88,10 +106,19 @@ export default function Navbar() {
         </div>
 
         <div className="hidden md:flex items-center gap-2">
-          <LanguageMenu current={current} onChange={(c) => i18n.changeLanguage(c)} t={t} />
+          <LanguageMenu current={current} onChange={(c) => i18n.changeLanguage(c)} t={t} transparent={transparent} />
 
           {!isAuthenticated ? (
-            <Link to="/login" className="btn btn-primary btn-sm">{t('navbar.loginSignup')}</Link>
+            <Link
+              to="/login"
+              className={`btn btn-sm transition-colors duration-300 ${
+                transparent
+                  ? 'bg-white text-primary-700 hover:bg-primary-50 border border-white/30'
+                  : 'btn-primary'
+              }`}
+            >
+              {t('navbar.loginSignup')}
+            </Link>
           ) : (
             <Dropdown
               label={t('navbar.account')}
@@ -100,11 +127,13 @@ export default function Navbar() {
                   type="button"
                   onClick={toggle}
                   {...aria}
-                  className="flex items-center gap-2 pl-1 pr-2 py-1 rounded-full hover:bg-surface-2 transition-colors"
+                  className={`flex items-center gap-2 pl-1 pr-2 py-1 rounded-full transition-colors ${
+                    transparent ? 'hover:bg-white/15' : 'hover:bg-surface-2'
+                  }`}
                 >
                   <Avatar name={user.name} size="sm" />
-                  <span className="text-small font-medium text-ink max-w-[10rem] truncate">{user.name}</span>
-                  <svg className="w-4 h-4 text-muted shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+                  <span className={`text-small font-medium max-w-[10rem] truncate transition-colors duration-300 ${transparent ? 'text-white' : 'text-ink'}`}>{user.name}</span>
+                  <svg className={`w-4 h-4 shrink-0 transition-colors duration-300 ${transparent ? 'text-white/70' : 'text-muted'}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2" aria-hidden="true">
                     <path strokeLinecap="round" d="M19 9l-7 7-7-7" />
                   </svg>
                 </button>
@@ -135,7 +164,9 @@ export default function Navbar() {
         {/* Mobile trigger */}
         <button
           type="button"
-          className="md:hidden w-11 h-11 -mr-2 flex items-center justify-center rounded-control text-body hover:bg-surface-2"
+          className={`md:hidden w-11 h-11 -mr-2 flex items-center justify-center rounded-control transition-colors ${
+            transparent ? 'text-white hover:bg-white/15' : 'text-body hover:bg-surface-2'
+          }`}
           onClick={() => setMobileOpen(o => !o)}
           aria-expanded={mobileOpen}
           aria-controls="mobile-menu"
@@ -147,7 +178,7 @@ export default function Navbar() {
         </button>
       </nav>
 
-      {/* Mobile menu — same links as desktop, including Dashboard. */}
+      {/* Mobile menu — always solid so it stays readable. */}
       {mobileOpen && (
         <div id="mobile-menu" className="md:hidden border-t border-line bg-surface animate-fade-in">
           <div className="container-app py-3 flex flex-col gap-1">
@@ -226,7 +257,8 @@ export default function Navbar() {
   )
 }
 
-function LanguageMenu({ current, onChange, t }) {
+
+function LanguageMenu({ current, onChange, t, transparent = false }) {
   return (
     <Dropdown
       label={t('navbar.language')}
@@ -235,7 +267,9 @@ function LanguageMenu({ current, onChange, t }) {
           type="button"
           onClick={toggle}
           {...aria}
-          className="flex items-center gap-1.5 px-3 py-2 rounded-control text-small font-medium text-body hover:bg-surface-2 min-h-touch"
+          className={`flex items-center gap-1.5 px-3 py-2 rounded-control text-small font-medium min-h-touch transition-colors ${
+            transparent ? 'text-white/85 hover:text-white hover:bg-white/15' : 'text-body hover:bg-surface-2'
+          }`}
         >
           <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
             <circle cx="12" cy="12" r="9" />

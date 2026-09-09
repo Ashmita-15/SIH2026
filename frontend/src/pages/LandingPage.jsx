@@ -5,6 +5,7 @@ import { useAuth } from '../context/AuthContext'
 import { homePathFor } from '../config/navigation'
 import useReveal from '../hooks/useReveal'
 import AppPreview from '../components/landing/AppPreview'
+import logo from '../assets/images/logo.png'
 
 const ICONS = {
   video: 'M15 10l4.55-2.27A1 1 0 0121 8.62v6.76a1 1 0 01-1.45.89L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z',
@@ -42,20 +43,16 @@ export default function LandingPage() {
     <div className="w-full overflow-x-clip">
 
       {/* ───────────────────────── Hero ───────────────────────── */}
-      <section className="relative aurora text-white overflow-hidden">
+      <section className="relative aurora text-white overflow-hidden -mt-16">
         <div className="absolute inset-0 grid-lines" aria-hidden="true" />
         <div
           className="absolute inset-x-0 bottom-0 h-32 bg-gradient-to-t from-ground to-transparent"
           aria-hidden="true"
         />
 
-        <div className="container-app relative pt-14 pb-20 sm:pt-20 sm:pb-28">
+        <div className="container-app relative pt-[7.5rem] pb-20 sm:pt-[9rem] sm:pb-28">
           <div className="grid lg:grid-cols-[1.05fr_auto] gap-14 lg:gap-10 items-center">
             <div className="max-w-2xl">
-              <p className="eyebrow eyebrow-dark reveal">
-                <span className="w-1.5 h-1.5 rounded-full bg-accent-300" aria-hidden="true" />
-                {t('landing.eyebrow')}
-              </p>
 
               <h1 className="text-d1 text-white mt-6 mb-6 reveal" data-reveal-delay="60">
                 {t('landing.headlineA')}{' '}
@@ -255,11 +252,7 @@ export default function LandingPage() {
           <div className="grid gap-10 sm:grid-cols-2 lg:grid-cols-4 mb-12">
             <div className="lg:col-span-2 max-w-sm">
               <div className="flex items-center gap-2.5 mb-4">
-                <span className="w-9 h-9 rounded-control bg-white/10 border border-white/15 text-white flex items-center justify-center" aria-hidden="true">
-                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-                    <path strokeLinecap="round" d="M12 6v12M6 12h12" />
-                  </svg>
-                </span>
+                <img src={logo} alt="GramSathi Logo" className="w-9 h-9 object-contain rounded-lg bg-white/10 p-0.5 shrink-0" />
                 <span className="font-semibold text-white text-h3">{t('hero.title')}</span>
               </div>
               <p className="text-small leading-relaxed mb-5">{t('footer.tagline')}</p>

@@ -7,6 +7,7 @@ import { homePathFor } from '../config/navigation'
 import { Field, Input, Select, PasswordInput } from '../components/ui/Field'
 import Button from '../components/ui/Button'
 import Alert from '../components/ui/Alert'
+import logo from '../assets/images/logo.png'
 
 const ROLES = ['patient', 'doctor', 'health_worker', 'pharmacy', 'hospital']
 
@@ -157,7 +158,8 @@ export default function LoginSignup() {
               </button>
             </div>
 
-            <div className="mb-6">
+            <div className="mb-6 text-center">
+              <img src={logo} alt="GramSathi Logo" className="w-12 h-12 mx-auto mb-3 object-contain rounded-lg" />
               <h1 className="text-h2 text-ink mb-1.5">{isLogin ? t('auth.signInTitle') : t('auth.signUpTitle')}</h1>
               <p className="text-small text-muted">{isLogin ? t('auth.signInSubtitle') : t('auth.signUpSubtitle')}</p>
             </div>

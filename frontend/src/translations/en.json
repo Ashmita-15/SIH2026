@@ -59,7 +59,7 @@
   "hero": {
     "title": "GramSathi",
     "headline": "Talk to a doctor without leaving your village",
-    "subtitle": "Book a video consultation, keep your health records safe, check symptoms with AI help, and order medicine from a nearby pharmacy — in your own language.",
+    "subtitle": "Book a video consultation, keep your health records safe, check symptoms with AI help, and order medicine from a nearby pharmacy, in your own language.",
     "cta": "Get started",
     "ctaSecondary": "See how it works",
     "dashboard": "Go to dashboard"
@@ -70,7 +70,7 @@
       "description": "Video calls and pages are designed to work on 2G and patchy mobile data."
     },
     "languages": {
-      "title": "English, Hindi and Punjabi",
+      "title": "English, Hindi, Bengali, Marathi and Punjabi",
       "description": "Every screen, including AI health guidance, speaks your language."
     },
     "free": {
@@ -589,7 +589,6 @@
     "loadError": "We couldn't load your hospital details."
   },
   "landing": {
-    "eyebrow": "Rural healthcare, reimagined",
     "headlineA": "Quality care,",
     "headlineB": "without the journey",
     "chipLive": "Doctor is online",

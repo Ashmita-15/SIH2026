@@ -6,6 +6,7 @@ import { navFor, homePathFor } from '../../config/navigation'
 import { LANGUAGES } from '../../translations/i18n'
 import Dropdown, { DropdownItem } from '../ui/Dropdown'
 import Avatar from '../ui/Avatar'
+import logo from '../../assets/images/logo.png'
 
 const Icon = ({ d, className = 'w-5 h-5' }) => (
   <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.7" aria-hidden="true">
@@ -79,11 +80,7 @@ export default function AppShell({ badges = {}, children }) {
       {/* ───────── Desktop sidebar ───────── */}
       <aside className="hidden lg:flex flex-col sticky top-0 h-screen bg-surface border-r border-line">
         <Link to="/" className="flex items-center gap-2.5 px-5 h-16 shrink-0 border-b border-line rounded-control">
-          <span className="w-8 h-8 rounded-control bg-primary-600 text-white flex items-center justify-center" aria-hidden="true">
-            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.2">
-              <path strokeLinecap="round" d="M12 6v12M6 12h12" />
-            </svg>
-          </span>
+          <img src={logo} alt="GramSathi Logo" className="w-8 h-8 object-contain rounded-lg shrink-0" />
           <span className="font-semibold text-ink tracking-tight">GramSathi</span>
         </Link>
 
@@ -146,11 +143,7 @@ export default function AppShell({ badges = {}, children }) {
         <header className="lg:hidden sticky top-0 z-30 bg-surface border-b border-line">
           <div className="flex items-center justify-between gap-3 h-14 px-4">
             <Link to="/" className="flex items-center gap-2 rounded-control">
-              <span className="w-7 h-7 rounded-control bg-primary-600 text-white flex items-center justify-center" aria-hidden="true">
-                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.2">
-                  <path strokeLinecap="round" d="M12 6v12M6 12h12" />
-                </svg>
-              </span>
+              <img src={logo} alt="GramSathi Logo" className="w-7 h-7 object-contain rounded-lg shrink-0" />
               <span className="font-semibold text-ink text-small tracking-tight">GramSathi</span>
             </Link>
 
