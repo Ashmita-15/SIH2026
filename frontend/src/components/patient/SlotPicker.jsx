@@ -17,7 +17,29 @@ import Skeleton from '../ui/Skeleton'
  * Taken slots are shown struck through rather than hidden: seeing that the
  * morning is full is what makes the afternoon a choice rather than a mystery.
  */
-export default function SlotPicker({ doctorId, value, onChange, error }) {
+/**
+ * Which hours count as "morning" and so on, by the hour a slot starts.
+ *
+ * "today", "tomorrow" and "soon" are days rather than times and deliberately
+ * map to nothing — they are shown back to the patient as a preference, but
+ * they cannot mark a slot, and guessing a day on their behalf is exactly the
+ * kind of decision this screen leaves to them. "night" maps to nothing because
+ * the last slot ends at 19:00: there is no night to offer, and pretending
+ * otherwise would be inventing availability.
+ */
+const BANDS = {
+  morning: (h) => h >= 9 && h < 12,
+  afternoon: (h) => h >= 12 && h < 16,
+  evening: (h) => h >= 16
+}
+
+const inBand = (slot, preferredTime) => {
+  const test = BANDS[preferredTime]
+  if (!test) return false
+  return test(Number(slot.split(':')[0]))
+}
+
+export default function SlotPicker({ doctorId, value, onChange, error, preferredTime }) {
   const { t, i18n } = useTranslation()
   const [days] = useState(() => upcomingDays(7))
   const [availability, setAvailability] = useState(null)
@@ -49,6 +71,15 @@ export default function SlotPicker({ doctorId, value, onChange, error }) {
   const pickSlot = (slot) => onChange({ date: selectedDay, slot })
 
   const freeCount = availability?.filter(s => s.available).length ?? 0
+
+  /**
+   * A preference can only ever mark a slot the server has just told us is
+   * genuinely free. Highlighting a taken hour because the patient asked for
+   * the evening would be telling them a doctor is available when they are not.
+   */
+  const preferredFree = (availability || []).filter(s => s.available && inBand(s.slot, preferredTime))
+  const bandExists = Boolean(BANDS[preferredTime])
+  const preferredMissed = bandExists && !loading && availability && preferredFree.length === 0
 
   return (
     <div className="flex flex-col gap-4">
@@ -95,6 +126,8 @@ export default function SlotPicker({ doctorId, value, onChange, error }) {
           <div role="radiogroup" aria-label={t('appointments.pickTime')} className="grid grid-cols-2 sm:grid-cols-3 gap-2">
             {availability.map(({ slot, available }) => {
               const active = slot === selectedSlot
+              // A hint, not a choice: the patient still has to tap it.
+              const suggested = available && !active && inBand(slot, preferredTime)
               return (
                 <button
                   key={slot}
@@ -106,6 +139,7 @@ export default function SlotPicker({ doctorId, value, onChange, error }) {
                   className={`px-2 py-2.5 rounded-control border text-small font-medium min-h-touch transition-colors
                               ${!available ? 'border-line-soft bg-surface-2 text-muted line-through cursor-not-allowed'
                                 : active ? 'border-primary-500 bg-primary-600 text-white'
+                                : suggested ? 'border-primary-400 border-dashed bg-primary-50 text-primary-700 hover:border-primary-500'
                                 : 'border-line bg-surface text-ink hover:border-primary-300'}`}
                 >
                   {slotLabel(slot, i18n.language)}
@@ -113,6 +147,20 @@ export default function SlotPicker({ doctorId, value, onChange, error }) {
               )
             })}
           </div>
+        )}
+
+        {/* Said plainly, either way. The preference was never a promise, and
+            a day where it cannot be met has to say so rather than quietly
+            highlighting nothing. */}
+        {bandExists && preferredFree.length > 0 && (
+          <p className="hint mt-2 text-primary-700">
+            {t('appointments.pref.matched', { value: t(`appointments.pref.${preferredTime}`) })}
+          </p>
+        )}
+        {preferredMissed && freeCount > 0 && (
+          <p className="hint mt-2">
+            {t('appointments.pref.unmatched', { value: t(`appointments.pref.${preferredTime}`) })}
+          </p>
         )}
 
         {freeCount === 0 && !loading && availability && (

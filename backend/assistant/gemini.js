@@ -12,7 +12,7 @@ const ENDPOINT = 'https://generativelanguage.googleapis.com/v1beta/models';
  * sees an empty process.env — which silently pinned this to the default and
  * ignored GEMINI_MODEL entirely.
  */
-export const model = () => process.env.GEMINI_MODEL || 'gemini-2.5-flash';
+export const model = () => process.env.GEMINI_MODEL || 'gemini-3.8-flash';
 
 /**
  * The free tier meters requests per day *per model* — 20 each, in separate
@@ -214,12 +214,22 @@ function* readFrame(frame, meta = {}) {
  * None of these jobs need reasoning: they transcribe or condense text that
  * is already in front of them.
  */
-export async function generateOnce({ systemInstruction, contents, signal, maxOutputTokens = 600, temperature = 0.2 }) {
+export async function generateOnce({ systemInstruction, contents, signal, maxOutputTokens = 600, temperature = 0.2, responseMimeType }) {
     const res = await callGemini('generateContent?', {
         ...(systemInstruction ? { systemInstruction: { parts: [{ text: systemInstruction }] } } : {}),
         contents,
         safetySettings: SAFETY_SETTINGS,
-        generationConfig: { temperature, maxOutputTokens, thinkingConfig: { thinkingBudget: 0 } }
+        generationConfig: {
+            temperature,
+            maxOutputTokens,
+            thinkingConfig: { thinkingBudget: 0 },
+            /**
+             * Optional, and off unless a caller asks for it. Callers that want
+             * JSON get it without a code fence; every existing caller is
+             * unaffected because the field is simply absent for them.
+             */
+            ...(responseMimeType ? { responseMimeType } : {})
+        }
     }, signal, utilityModel());
 
     const data = await res.json();

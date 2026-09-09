@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react'
-import { useParams, useNavigate } from 'react-router-dom'
+import { useParams, useNavigate, useLocation } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import api, { friendlyError } from '../services/api'
 import { useAuth } from '../context/AuthContext'
@@ -14,6 +14,10 @@ import { ErrorState } from '../components/ui/States'
 export default function DoctorDetails() {
   const { doctorId } = useParams()
   const navigate = useNavigate()
+  const location = useLocation()
+  // Only what was gathered while looking for a doctor travels on to booking.
+  const incoming = location.state?.voiceContext
+  const voice = incoming && incoming.for === 'FIND_DOCTOR' ? incoming : null
   const { t } = useTranslation()
   const { userId } = useAuth()
   const toast = useToast()
@@ -132,7 +136,9 @@ export default function DoctorDetails() {
 
               <Button
                 block
-                onClick={() => navigate('/patient/care/book', { state: { doctor } })}
+                onClick={() => navigate('/patient/care/book', {
+                  state: { doctor, symptoms: voice?.symptom || undefined, preferredTime: voice?.preferredTime || undefined }
+                })}
               >
                 {t('appointments.book')}
               </Button>

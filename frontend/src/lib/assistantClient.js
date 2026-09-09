@@ -57,13 +57,15 @@ export async function fetchAssistantConfig(lang) {
  * stream closes. Aborting via `signal` is a normal outcome, not an error —
  * that is the Stop button.
  */
-export async function streamAssistant({ helpType, lang, messages, signal, onEvent }) {
+export async function streamAssistant({ helpType, lang, messages, booking, signal, onEvent }) {
   let res
   try {
     res = await fetch(`${BASE}/assistant/chat`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', ...authHeaders() },
-      body: JSON.stringify({ helpType, lang, messages }),
+      // `booking` is optional conversational state; omitted, the request is
+      // byte-identical to before it existed.
+      body: JSON.stringify({ helpType, lang, messages, booking }),
       signal
     })
   } catch (err) {

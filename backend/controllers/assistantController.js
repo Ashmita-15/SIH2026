@@ -4,6 +4,7 @@ import { hasRedFlag, ESCALATION_SPOKEN } from '../assistant/redFlags.js';
 import { createSpokenSplitter, stripMarkers } from '../assistant/spokenSplit.js';
 import { extractFollowUps, hideTrailingMarker } from '../assistant/followUps.js';
 import { transcribeAudio } from '../assistant/transcribe.js';
+import { deriveGuidance, extractBookingHints } from '../assistant/conversationGuidance.js';
 import { retrieveContext } from '../rag/retrieve.js';
 import { offlinePack } from '../assistant/offlineFallback.js';
 
@@ -73,8 +74,29 @@ export const chat = async (req, res) => {
     // Escalate on the patient's own words, before the model is called, and
     // on every turn — not only the first message of the conversation.
     const latest = [...history].reverse().find(m => m.role !== 'assistant');
-    if (hasRedFlag(latest?.text)) {
+    const urgent = hasRedFlag(latest?.text);
+    if (urgent) {
         send(res, { type: 'redflag', spoken: ESCALATION_SPOKEN[locale] });
+    }
+
+    /**
+     * The patient is part-way through arranging an appointment.
+     *
+     * This turn is answered with hints instead of a written reply: the doctors,
+     * the real free slots and the wording all live on the client, so generating
+     * prose here would only produce something it has to throw away — and cost a
+     * whole generation to do it.
+     *
+     * Never while a red flag is in the air. Somebody describing chest pain is
+     * not choosing an appointment time, and the escalation is the only thing
+     * that acts on that turn.
+     */
+    if (!urgent && req.body?.booking?.active) {
+        const hints = await extractBookingHints({ messages: history, lang: locale, signal: controller.signal });
+        send(res, { type: 'booking_hints', hints });
+        // The client writes this turn's text; `done` must not overwrite it.
+        send(res, { type: 'done', text: '', spoken: '', citations: [], followUps: [], truncated: false });
+        return res.end();
     }
 
     /**
@@ -96,12 +118,85 @@ export const chat = async (req, res) => {
      * a client that could name its own patientId could read another
      * patient's records.
      */
-    const { text: retrieved, citations } = await retrieveContext({
-        query: latest?.text || '',
-        patientId: req.user?.id
-    });
+    /**
+     * Retrieval and navigation detection run together.
+     *
+     * Detection is a second, cheap model call, and awaiting it in sequence
+     * would add its whole latency to time-to-first-token on exactly the
+     * connections least able to afford it. Run alongside retrieval it is
+     * almost free in wall time, and resolving both before the stream opens
+     * means neither can try to write to a response that has already ended.
+     *
+     * Navigation is suppressed outright when a red flag has fired: somebody
+     * describing chest pain must not be moved to a different screen, and the
+     * escalation stays the only thing that acted on that turn.
+     */
+    const [{ text: retrieved, citations }, guidance] = await Promise.all([
+        retrieveContext({
+            query: latest?.text || '',
+            patientId: req.user?.id
+        }),
+        urgent
+            ? Promise.resolve(null)
+            : deriveGuidance({
+                messages: history,
+                lang: locale,
+                hasFiles: Boolean(latest?.files?.length),
+                signal: controller.signal
+            })
+    ]);
 
     if (citations.length) send(res, { type: 'citations', items: citations });
+
+    /**
+     * A guided turn answers with one of conversationGuidance's fixed
+     * sentences and stops there.
+     *
+     * The model is deliberately not asked to phrase these. Asking somebody
+     * when they would like to see a doctor, or reading their own words back to
+     * them, must not be a chance to volunteer a diagnosis — and short-circuiting
+     * also saves a whole generation on the turns that need it least.
+     */
+    const guided = guidance?.mode === 'care_guidance';
+    if (guided) {
+        send(res, { type: 'spoken', text: guidance.say });
+        send(res, { type: 'delta', text: guidance.say });
+        // `spoken` above is already being read aloud, so the navigation event
+        // carries no speech of its own — otherwise the client says it twice.
+        if (guidance.route) {
+            send(res, {
+                type: 'navigate',
+                intent: guidance.goal,
+                route: guidance.route,
+                // Validated in conversationGuidance; the client treats it as a
+                // preference to display, never as an instruction.
+                context: guidance.context
+            });
+        }
+        send(res, {
+            type: 'done',
+            text: guidance.say,
+            spoken: guidance.say,
+            citations: [],
+            followUps: guidance.choices || [],
+            truncated: false
+        });
+        return res.end();
+    }
+
+    /**
+     * The single-step goals are unchanged: the route comes from the allowlist
+     * in intentRouter, never from the model, and the ordinary answer still
+     * streams underneath it.
+     */
+    if (guidance?.mode === 'navigate') {
+        send(res, {
+            type: 'navigate',
+            intent: guidance.goal,
+            route: guidance.route,
+            spoken: guidance.spoken
+        });
+    }
 
     const systemInstruction = buildSystemPrompt({
         helpType: task,

@@ -42,6 +42,41 @@ const appointmentSchema = new mongoose.Schema({
     }]
 }, { timestamps: true });
 
+/**
+ * One doctor, one hour, one patient.
+ *
+ * The availability endpoint has always treated a pending request as holding
+ * the slot — offering it to somebody else only creates a clash the doctor has
+ * to untangle by hand. Until now nothing enforced that on the way in, so the
+ * read side promised an exclusivity the write side never kept, and two
+ * simultaneous requests both won.
+ *
+ * The constraint lives in the database rather than in a check before the
+ * insert, because a check-then-insert cannot be made safe: two requests can
+ * both read "free" before either writes. The controller still looks first, but
+ * only so the answer is a friendly 409 instead of a duplicate-key error.
+ *
+ * The filter mirrors the lifecycle exactly:
+ *   pending, confirmed  → hold the slot
+ *   rejected, cancelled, completed → release it, so the hour can be booked again
+ *
+ * `$type: 'string'` with `$gt: ''` keeps the twenty existing slotless
+ * appointments out of it. They predate slot picking, `timeSlot` is still
+ * optional, and without this every one of them would collide with the others
+ * on a null key.
+ */
+appointmentSchema.index(
+    { doctorId: 1, requestedDate: 1, timeSlot: 1 },
+    {
+        name: 'active_slot_unique',
+        unique: true,
+        partialFilterExpression: {
+            status: { $in: ['pending', 'confirmed'] },
+            timeSlot: { $type: 'string', $gt: '' }
+        }
+    }
+);
+
 export default mongoose.model('Appointment', appointmentSchema);
 
 

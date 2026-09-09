@@ -14,8 +14,8 @@ import { formatFileSize } from '../../lib/status'
 const MAX_FILES = 5
 const MAX_BYTES = 50 * 1024 * 1024
 
-export default function BookingForm({ selectedDoctor: doctorFromProps, prefillSymptoms, prefillMedia, onBooked }) {
-  const { t } = useTranslation()
+export default function BookingForm({ selectedDoctor: doctorFromProps, prefillSymptoms, prefillMedia, prefillPreferredTime, onBooked }) {
+  const { t, i18n } = useTranslation()
   const { userId } = useAuth()
   const toast = useToast()
 
@@ -227,6 +227,7 @@ export default function BookingForm({ selectedDoctor: doctorFromProps, prefillSy
                 doctorId={selectedDoctor._id}
                 value={when}
                 error={errors.date}
+                preferredTime={prefillPreferredTime}
                 onChange={(next) => { setWhen(next); setErrors(err => ({ ...err, date: undefined })) }}
               />
             )}
@@ -351,6 +352,54 @@ export default function BookingForm({ selectedDoctor: doctorFromProps, prefillSy
                 </div>
                 <p className="hint mt-1.5">{t('appointments.uploadingHint')}</p>
               </div>
+            )}
+
+            {/**
+              * A last look before anything is sent.
+              *
+              * Read-only on purpose, and worded as preferences and choices
+              * rather than facts: nothing on this screen has been booked, and
+              * for somebody who arrived here by speaking — who may not have
+              * read a word of the form — this is the one place that says so
+              * plainly. Submitting below is still the only thing that books.
+              */}
+            {selectedDoctor && (
+              <section className="rounded-card border border-line bg-surface-2 p-4" aria-live="polite">
+                <h3 className="label mb-2.5">{t('appointments.summary.title')}</h3>
+                <dl className="text-small space-y-1.5">
+                  <div className="flex gap-2">
+                    <dt className="text-muted shrink-0">{t('appointments.summary.doctor')}:</dt>
+                    <dd className="text-ink font-medium min-w-0">{selectedDoctor.name}</dd>
+                  </div>
+                  {selectedDoctor.specialization && (
+                    <div className="flex gap-2">
+                      <dt className="text-muted shrink-0">{t('appointments.summary.specialization')}:</dt>
+                      <dd className="text-ink min-w-0">{selectedDoctor.specialization}</dd>
+                    </div>
+                  )}
+                  {prefillPreferredTime && (
+                    <div className="flex gap-2">
+                      <dt className="text-muted shrink-0">{t('appointments.summary.preferred')}:</dt>
+                      <dd className="text-ink min-w-0">{t(`appointments.pref.${prefillPreferredTime}`)}</dd>
+                    </div>
+                  )}
+                  <div className="flex gap-2">
+                    <dt className="text-muted shrink-0">{t('appointments.summary.chosen')}:</dt>
+                    <dd className="text-ink min-w-0">
+                      {when.date && when.slot
+                        ? `${when.date} · ${slotLabel(when.slot, i18n.language)}`
+                        : t('appointments.summary.notChosen')}
+                    </dd>
+                  </div>
+                  {symptoms.trim() && (
+                    <div className="flex gap-2">
+                      <dt className="text-muted shrink-0">{t('appointments.summary.reason')}:</dt>
+                      <dd className="text-ink min-w-0 break-words">{symptoms.trim()}</dd>
+                    </div>
+                  )}
+                </dl>
+                <p className="hint mt-3">{t('appointments.summary.notBooked')}</p>
+              </section>
             )}
 
             <div className="flex gap-2">

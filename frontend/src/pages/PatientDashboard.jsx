@@ -84,6 +84,7 @@ function BookRoute() {
         selectedDoctor={location.state?.doctor}
         prefillSymptoms={location.state?.symptoms}
         prefillMedia={location.state?.media}
+        prefillPreferredTime={location.state?.preferredTime}
         onBooked={() => navigate('/patient/care')}
       />
     </Page>

@@ -327,7 +327,28 @@
     "changeDoctor": "Change",
     "bookWithHint": "Pick a time that suits you. You can add a photo, voice note or video on the next screen.",
     "acceptAt": "Accept {{time}}",
-    "suggestAnother": "Suggest another time"
+    "suggestAnother": "Suggest another time",
+    "pref": {
+      "morning": "Morning",
+      "afternoon": "Afternoon",
+      "evening": "Evening",
+      "night": "Night",
+      "today": "Today",
+      "tomorrow": "Tomorrow",
+      "soon": "As soon as possible",
+      "matched": "Times marked with a dashed border match your preference ({{value}}). Tap one to choose it.",
+      "unmatched": "No free time matches your preference ({{value}}) on this day. Other free times are shown above."
+    },
+    "summary": {
+      "title": "Appointment summary",
+      "doctor": "Doctor",
+      "specialization": "Specialization",
+      "preferred": "Your preferred time",
+      "chosen": "Time you chose",
+      "notChosen": "Not chosen yet",
+      "reason": "Reason you gave",
+      "notBooked": "Nothing is booked yet. Choose a day and time, then send your request."
+    }
   },
   "records": {
     "title": "Health records",
@@ -377,7 +398,15 @@
     "backToDoctors": "Back to doctors",
     "aboutDoctor": "About",
     "consultationOptions": "Consultation options",
-    "notFound": "We couldn't find that doctor."
+    "notFound": "We couldn't find that doctor.",
+    "voiceNote": {
+      "title": "From what you told me",
+      "reason": "You said: {{value}}",
+      "time": "Preferred time: {{value}}",
+      "specialty": "Speciality: {{value}}",
+      "unmatched": "That speciality is not available here, so all doctors are shown.",
+      "clear": "Clear"
+    }
   },
   "symptomChecker": {
     "title": "AI health assistant",
@@ -675,6 +704,15 @@
       "empty": "I didn't hear anything. Hold the mic and speak clearly.",
       "busy": "The assistant is busy right now. Wait a moment, then hold the mic again."
     },
+    "voice": {
+      "start": "Speak for help",
+      "starting": "Starting…",
+      "listening": "Listening…",
+      "processing": "Thinking…",
+      "speaking": "Speaking…",
+      "stop": "Stop",
+      "ended": "Voice help is off."
+    },
     "micHint": "Hold the mic and speak. Release when you're done.",
     "groundedIn": "Based on",
     "outOfStock": "out of stock",
@@ -697,5 +735,26 @@
     "prescriptionAdded": "Prescription attached",
     "prescriptionReplace": "Use a different photo",
     "prescriptionMissing": "Please add a photo of your prescription to continue."
+  },
+  "booking": {
+    "askDoctor": "Which doctor would you like to see?",
+    "doctorUnknown": "I could not find that doctor. The doctors available are: {{list}}. Which one would you like?",
+    "doctorAmbiguous": "I found more than one: {{list}}. Which one would you like?",
+    "askDate": "Alright, {{doctor}}. Which day would you like — today, tomorrow, or the day after?",
+    "dateUnknown": "I can arrange today, tomorrow or the day after. Which day would you like?",
+    "checking": "Let me check what times are free.",
+    "noSlots": "{{doctor}} has no free time {{date}}. Would you like a different day?",
+    "askSlot": "On {{date}} these times are free: {{slots}}. Which time would you like?",
+    "slotUnknown": "That time is not free. The free times are: {{slots}}. Which one would you like?",
+    "summary": "Let me confirm. Doctor: {{doctor}}. Day: {{date}}. Time: {{slot}}. Reason: {{symptoms}}. Shall I book this appointment?",
+    "summaryNoSymptoms": "Let me confirm. Doctor: {{doctor}}. Day: {{date}}. Time: {{slot}}. Shall I book this appointment?",
+    "booked": "Your appointment request has been sent. {{doctor}}, {{date}}, {{slot}}. The doctor will confirm it.",
+    "conflict": "Sorry, that time has just been taken. These times are still free: {{slots}}. Which one would you like?",
+    "conflictNoSlots": "Sorry, that time has just been taken and nothing else is free {{date}}. Would you like a different day?",
+    "failed": "Sorry, I could not send the appointment request. Nothing has been booked. Please try again in a moment.",
+    "cancelled": "Alright, I have not booked anything.",
+    "today": "today",
+    "tomorrow": "tomorrow",
+    "day_after": "the day after tomorrow"
   }
 }

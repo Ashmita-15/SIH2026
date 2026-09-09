@@ -33,12 +33,33 @@ const ASSISTED_POPULATE = [
 
 export const bookAppointment = async (req, res) => {
     try {
-        const { patientId, doctorId, requestedDate, symptoms, consultationType, timeSlot } = req.body;
-        
+        const { doctorId, requestedDate, symptoms, consultationType, timeSlot } = req.body;
+
+        /**
+         * Who this appointment is for is decided by the token, never by the
+         * request.
+         *
+         * `patientId` used to be read straight from the body, so an
+         * authenticated user could book in somebody else's name by changing one
+         * field — authentication proved that a person was signed in, not whose
+         * appointment was being created. The body value is now ignored
+         * entirely rather than compared, because there is no reason for a
+         * patient booking for themselves to send one at all.
+         *
+         * This endpoint is only the patient's own path. A health worker
+         * booking on a patient's behalf goes through healthWorkerService, which
+         * derives both the patient and the worker server-side and records who
+         * assisted; it never reaches this controller.
+         */
+        if (req.user?.role !== 'patient') {
+            return res.status(403).json({ message: 'Only a patient can book their own appointment' });
+        }
+        const patientId = req.user.id;
+
         // Validate required fields
-        if (!patientId || !doctorId || !requestedDate) {
-            return res.status(400).json({ 
-                message: 'Missing required fields: patientId, doctorId, or requestedDate' 
+        if (!doctorId || !requestedDate) {
+            return res.status(400).json({
+                message: 'Missing required fields: doctorId or requestedDate'
             });
         }
 
@@ -47,6 +68,23 @@ export const bookAppointment = async (req, res) => {
         if (timeSlot && !isValidSlot(timeSlot)) {
             return res.status(400).json({ message: 'Unknown time slot' });
         }
+
+        const when = new Date(requestedDate);
+        if (Number.isNaN(when.getTime())) {
+            return res.status(400).json({ message: 'requestedDate must be a valid date' });
+        }
+
+        /**
+         * A slot booking is a day plus an hour, so the day is pinned to UTC
+         * midnight — which is exactly what "YYYY-MM-DD" already parses to, and
+         * how every stored appointment is written. Without this, two requests
+         * for the same slot carrying different times of day would produce
+         * different index keys and both succeed.
+         *
+         * setUTCHours, not setHours: this server runs at +05:30, where the
+         * local-time version would move the booking to the previous day.
+         */
+        if (timeSlot) when.setUTCHours(0, 0, 0, 0);
         
         // Process uploaded attachments if any
         const attachments = [];
@@ -78,7 +116,7 @@ export const bookAppointment = async (req, res) => {
         const appointmentData = {
             patientId,
             doctorId,
-            requestedDate: new Date(requestedDate),
+            requestedDate: when,
             symptoms: symptoms || '',
             consultationType: consultationType || 'video',
             status: 'pending',
@@ -88,7 +126,25 @@ export const bookAppointment = async (req, res) => {
         // The requested hour is the whole point of the patient picking a slot:
         // without it stored, the doctor has nothing to accept in one tap.
         if (timeSlot) appointmentData.timeSlot = timeSlot;
-        
+
+        /**
+         * Asked first so the answer is a sentence rather than a driver error.
+         * This is courtesy, not the guarantee — two requests can both read
+         * "free" here before either writes, which is what the unique index on
+         * the model is for.
+         */
+        if (timeSlot) {
+            const clash = await Appointment.exists({
+                doctorId,
+                requestedDate: when,
+                timeSlot,
+                status: { $in: ['pending', 'confirmed'] }
+            });
+            if (clash) {
+                return res.status(409).json({ message: 'That time slot is no longer available. Please choose another time.' });
+            }
+        }
+
         const appointment = await Appointment.create(appointmentData);
         
         // Populate doctor and patient details for response
@@ -101,6 +157,14 @@ export const bookAppointment = async (req, res) => {
             appointment: populatedAppointment
         });
     } catch (e) {
+        /**
+         * The race actually being lost. Two requests passed the check above,
+         * the index let exactly one through, and this is the other one — it
+         * gets the same answer it would have got a millisecond earlier.
+         */
+        if (e?.code === 11000) {
+            return res.status(409).json({ message: 'That time slot is no longer available. Please choose another time.' });
+        }
         res.status(500).json({ message: e.message });
     }
 };
