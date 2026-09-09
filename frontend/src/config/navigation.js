@@ -43,7 +43,8 @@ const NAV = {
   hospital: [
     { key: 'overview', to: '/hospital', icon: ICONS.building, labelKey: 'nav.hospital.overview', end: true },
     { key: 'referrals', to: '/hospital/referrals', icon: ICONS.inbox, labelKey: 'nav.hospital.referrals' },
-    { key: 'coordination', to: '/hospital/coordination', icon: ICONS.care, labelKey: 'nav.hospital.coordination' }
+    { key: 'coordination', to: '/hospital/coordination', icon: ICONS.care, labelKey: 'nav.hospital.coordination' },
+    { key: 'staff', to: '/hospital/staff', icon: ICONS.patients, labelKey: 'nav.hospital.staff' }
   ],
   health_worker: [
     { key: 'overview', to: '/health-worker', icon: ICONS.today, labelKey: 'nav.health_worker.overview', end: true },

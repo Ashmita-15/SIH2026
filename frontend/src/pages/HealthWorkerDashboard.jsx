@@ -820,8 +820,11 @@ function WorkerReferrals() {
 
   return (
     <Page title="Referrals" description="Sent from and received by your facility">
-      {error && <ErrorState message={error} />}
-      {!referrals ? <Loading /> : referrals.length === 0 ? (
+      {/* One state at a time. Setting an empty list on failure meant the page
+          said "we couldn't load this" and "no referrals" at once — one of them
+          claiming it broke, the other claiming there is nothing to show. */}
+      {error ? <ErrorState message={error} />
+        : !referrals ? <Loading /> : referrals.length === 0 ? (
         <EmptyState title="No referrals" message="Referrals involving your facility will appear here." />
       ) : (
         <div className="grid gap-3">

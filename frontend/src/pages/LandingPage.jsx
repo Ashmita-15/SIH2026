@@ -2,6 +2,7 @@ import React from 'react'
 import { Link } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { useAuth } from '../context/AuthContext'
+import { homePathFor } from '../config/navigation'
 import useReveal from '../hooks/useReveal'
 import AppPreview from '../components/landing/AppPreview'
 
@@ -34,7 +35,7 @@ export default function LandingPage() {
   const scrollTo = (id) => document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
 
   const primaryCta = isAuthenticated
-    ? { to: `/${user.role}`, label: t('hero.dashboard') }
+    ? { to: homePathFor(user.role), label: t('hero.dashboard') }
     : { to: '/login', label: t('hero.cta') }
 
   return (
@@ -274,7 +275,7 @@ export default function LandingPage() {
                 <li><button type="button" onClick={() => scrollTo('features')} className="hover:text-white transition-colors">{t('footer.featuresTitle')}</button></li>
                 <li>
                   {isAuthenticated
-                    ? <Link to={`/${user.role}`} className="hover:text-white transition-colors">{t('navbar.dashboard')}</Link>
+                    ? <Link to={homePathFor(user.role)} className="hover:text-white transition-colors">{t('navbar.dashboard')}</Link>
                     : <Link to="/login" className="hover:text-white transition-colors">{t('navbar.loginSignup')}</Link>}
                 </li>
               </ul>

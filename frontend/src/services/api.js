@@ -49,7 +49,17 @@ export function friendlyError(error, fallback = 'Something went wrong. Please tr
   if (status === 400 && /credentials/i.test(raw)) return 'That email or password is incorrect.'
   if (status === 400) return raw && raw.length < 120 && !/^[A-Z]\d|Cast to|ObjectId/.test(raw) ? raw : 'Please check the details you entered.'
   if (status === 401) return 'Your session expired. Please sign in again.'
-  if (status === 403) return "You don't have permission to do that."
+  /**
+   * A 403 usually has a reason worth reading — "not attached to a facility"
+   * tells someone what to do next, where "you don't have permission" leaves
+   * them staring at a page that looks broken. Same guard as the 400 branch:
+   * short, human sentences only, never a driver error.
+   */
+  if (status === 403) {
+    return raw && raw.length < 120 && !/^[A-Z]\d|Cast to|ObjectId/.test(raw)
+      ? raw
+      : "You don't have permission to do that."
+  }
   if (status === 404) return "We couldn't find what you were looking for."
   if (status === 413) return 'Those files are too large. Each file must be under 50MB.'
   if (status >= 500) return 'The server had a problem. Please try again in a moment.'

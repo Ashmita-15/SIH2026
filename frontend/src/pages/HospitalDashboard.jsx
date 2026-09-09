@@ -34,6 +34,7 @@ export default function HospitalDashboard() {
       <Route index element={<FacilityOverview />} />
       <Route path="profile" element={<HospitalProfile />} />
       <Route path="coordination" element={<CoordinationRoute />} />
+      <Route path="staff" element={<HealthWorkerStaff />} />
       <Route path="referrals" element={<ReferralInbox />} />
       <Route path="referrals/:referralId" element={<FacilityReferralDetail />} />
       <Route path="*" element={<Navigate to="/hospital" replace />} />
@@ -548,6 +549,89 @@ function CoordinationRoute() {
       description="Follow-up suggested by agents. Nothing happens until you approve it."
     >
       <CoordinationPanel />
+    </Page>
+  )
+}
+
+
+/**
+ * The facility's frontline workers.
+ *
+ * A health worker's facility is what every referral, encounter and assisted
+ * consultation is attributed to, and until now nothing could set it outside the
+ * seed — so a worker who signed up was stuck with no facility and a referrals
+ * tab that only returned an error. Attaching is the facility's decision, which
+ * is why it lives here and not on the worker's own sign-up form.
+ */
+function HealthWorkerStaff() {
+  const { t } = useTranslation()
+  const toast = useToast()
+  const [data, setData] = useState(null)
+  const [error, setError] = useState('')
+  const [busy, setBusy] = useState('')
+
+  const load = useCallback(() => {
+    setError('')
+    api.get('/hospital/health-workers')
+      .then(({ data }) => setData(data))
+      .catch(e => { setError(friendlyError(e)); setData({ attached: [], unattached: [] }) })
+  }, [])
+  useEffect(() => { load() }, [load])
+
+  const act = async (worker, attach) => {
+    setBusy(worker._id)
+    try {
+      if (attach) await api.post('/hospital/health-workers/add', { workerId: worker._id })
+      else await api.delete('/hospital/health-workers/remove', { data: { workerId: worker._id } })
+      toast.success(attach ? t('staff.added', { name: worker.name }) : t('staff.removed', { name: worker.name }))
+      load()
+    } catch (e) {
+      toast.error(friendlyError(e))
+    } finally {
+      setBusy('')
+    }
+  }
+
+  const Row = ({ worker, attach }) => (
+    <div className="flex items-center gap-3 p-3.5 rounded-card border border-line bg-surface">
+      <div className="min-w-0 flex-1">
+        <p className="text-small font-semibold text-ink truncate">
+          {worker.name}
+          {worker.workerType && <span className="text-muted font-normal"> · {worker.workerType.toUpperCase()}</span>}
+        </p>
+        <p className="text-caption text-muted truncate">
+          {(worker.catchmentVillages || []).join(', ') || worker.village || '—'}
+        </p>
+      </div>
+      <Button
+        size="sm"
+        variant={attach ? 'primary' : 'ghost'}
+        loading={busy === worker._id}
+        onClick={() => act(worker, attach)}
+      >
+        {attach ? t('staff.attach') : t('staff.remove')}
+      </Button>
+    </div>
+  )
+
+  return (
+    <Page title={t('staff.title')} description={t('staff.subtitle')}>
+      {error ? <ErrorState message={error} /> : !data ? <Loading /> : (
+        <div className="grid gap-6 lg:grid-cols-2">
+          <section className="flex flex-col gap-2.5">
+            <h2 className="section-title">{t('staff.attached', { count: data.attached.length })}</h2>
+            {data.attached.length === 0
+              ? <EmptyState title={t('staff.noneAttached')} message={t('staff.noneAttachedHelp')} />
+              : data.attached.map(w => <Row key={w._id} worker={w} attach={false} />)}
+          </section>
+          <section className="flex flex-col gap-2.5">
+            <h2 className="section-title">{t('staff.available', { count: data.unattached.length })}</h2>
+            {data.unattached.length === 0
+              ? <EmptyState title={t('staff.noneAvailable')} message={t('staff.noneAvailableHelp')} />
+              : data.unattached.map(w => <Row key={w._id} worker={w} attach />)}
+          </section>
+        </div>
+      )}
     </Page>
   )
 }

@@ -162,8 +162,14 @@
       "passwordRequired": "कृपया पासवर्ड लिखें।",
       "passwordShort": "कम से कम 6 अक्षर इस्तेमाल करें।",
       "confirmMismatch": "दोनों पासवर्ड एक जैसे नहीं हैं।",
-      "ageInvalid": "कृपया 1 से 120 के बीच उम्र लिखें।"
-    }
+      "ageInvalid": "कृपया 1 से 120 के बीच उम्र लिखें।",
+      "workerTypeRequired": "ASHA, ANM या CHO चुनिए",
+      "villageRequired": "गाँव ज़रूरी है"
+    },
+    "workerType": "आपकी भूमिका",
+    "workerTypePlaceholder": "ASHA, ANM या CHO चुनिए…",
+    "villageWorkerHint": "वह गाँव जहाँ आप काम करती हैं। बाद में और गाँव जोड़े जा सकते हैं।",
+    "workerNotice": "शुरुआत में आपका खाता सिर्फ़ इसी गाँव के लिए होगा। रेफरल और संस्था से जुड़ी सुविधाएँ तब तक बंद रहेंगी जब तक आपका PHC या अस्पताल आपको अपनी संस्था में नहीं जोड़ता।"
   },
   "status": {
     "appointment": {
@@ -638,7 +644,8 @@
     "hospital": {
       "overview": "सारांश",
       "referrals": "रेफरल",
-      "coordination": "समन्वय"
+      "coordination": "समन्वय",
+      "staff": "स्वास्थ्य कार्यकर्ता"
     },
     "health_worker": {
       "overview": "कार्य सूची",
@@ -756,5 +763,28 @@
     "today": "आज",
     "tomorrow": "कल",
     "day_after": "परसों"
+  },
+  "staff": {
+    "title": "स्वास्थ्य कार्यकर्ता",
+    "subtitle": "इस संस्था से जुड़े ASHA, ANM और CHO",
+    "attached": "इस संस्था में ({{count}})",
+    "available": "जुड़ने के लिए ({{count}})",
+    "attach": "जोड़ें",
+    "remove": "हटाएँ",
+    "added": "{{name}} को इस संस्था में जोड़ा गया",
+    "removed": "{{name}} को हटाया गया",
+    "noneAttached": "अभी कोई कार्यकर्ता नहीं",
+    "noneAttachedHelp": "कार्यकर्ता जोड़ें ताकि उनके रेफरल और दौरे इस संस्था के नाम दर्ज हों।",
+    "noneAvailable": "कोई प्रतीक्षा में नहीं",
+    "noneAvailableHelp": "बिना संस्था के बने खाते यहाँ दिखेंगे।"
+  },
+  "queue": {
+    "position": "आप कतार में {{n}} नंबर पर हैं",
+    "ahead": "आपसे पहले लगभग {{n}} लोग",
+    "eta": "पहुँचने का अनुमानित समय: लगभग {{time}}",
+    "approx": "यह अनुमान है, तय समय नहीं।",
+    "full": "इस दिन सभी समय भर चुके हैं",
+    "alternatives": "दूसरे विकल्प",
+    "tier": "प्राथमिकता"
   }
 }

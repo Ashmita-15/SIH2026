@@ -1,5 +1,7 @@
 import Appointment from '../models/Appointment.js';
 import { SLOTS, isValidSlot } from '../config/slots.js';
+import User from '../models/User.js';
+import { buildQueue, findAlternatives } from '../services/queueService.js';
 
 /**
  * Confirming, rejecting and completing all took the appointment id straight
@@ -398,6 +400,55 @@ export const getDoctorAvailability = async (req, res) => {
                     available: !taken.has(slot) && start > now
                 };
             })
+        });
+    } catch (e) {
+        res.status(500).json({ message: e.message });
+    }
+};
+
+
+/**
+ * The day's queue for one doctor, and where else to go if it is full.
+ *
+ * Read-only by construction: it opens no writes and the ordering is recomputed
+ * from appointments that already exist, so it can never disagree with them.
+ * Ordering is deterministic — referral priority a clinician set, then care
+ * groups from structured records, then first-come-first-served.
+ */
+export const getDoctorQueue = async (req, res) => {
+    try {
+        const { doctorId } = req.query;
+        const { date } = req.query;
+        if (!doctorId) return res.status(400).json({ message: 'doctorId is required' });
+        if (!date || Number.isNaN(new Date(date).getTime())) {
+            return res.status(400).json({ message: 'A valid date is required' });
+        }
+
+        const doctor = await User.findById(doctorId).select('role name specialization hospitalId');
+        if (!doctor || doctor.role !== 'doctor') {
+            return res.status(404).json({ message: 'Doctor not found' });
+        }
+
+        const queue = await buildQueue({ doctorId, date });
+        const capacity = queue[0]?.capacity || { total: SLOTS.length, booked: 0, remainingToday: SLOTS.length };
+        const full = capacity.remainingToday <= 0;
+
+        /**
+         * Patients see their own place and nothing about anyone else. A queue
+         * is a list of sick neighbours; the position is the useful part, the
+         * names are not ours to hand out.
+         */
+        const mine = queue.find(q => String(q.patientId || '') === String(req.user.id));
+        const isPatient = req.user.role === 'patient';
+
+        res.json({
+            doctor: { id: String(doctor._id), name: doctor.name, specialization: doctor.specialization || null },
+            date,
+            capacity,
+            you: mine ? { position: mine.position, tier: mine.tierLabel, aheadOfYou: mine.aheadOfYou,
+                          estimatedAt: mine.estimatedAt, approximate: true } : null,
+            queue: isPatient ? undefined : queue.map(({ capacity: _c, ...row }) => row),
+            alternatives: full ? await findAlternatives({ doctorId, date }) : []
         });
     } catch (e) {
         res.status(500).json({ message: e.message });

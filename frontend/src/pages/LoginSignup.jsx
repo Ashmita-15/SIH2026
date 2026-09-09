@@ -3,11 +3,23 @@ import { useNavigate, useLocation, useSearchParams } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import api, { friendlyError } from '../services/api'
 import { useAuth } from '../context/AuthContext'
+import { homePathFor } from '../config/navigation'
 import { Field, Input, Select, PasswordInput } from '../components/ui/Field'
 import Button from '../components/ui/Button'
 import Alert from '../components/ui/Alert'
 
-const ROLES = ['patient', 'doctor', 'pharmacy', 'hospital']
+const ROLES = ['patient', 'doctor', 'health_worker', 'pharmacy', 'hospital']
+
+/**
+ * ASHA, ANM and CHO are the three frontline roles, kept as one account type
+ * that differs by training rather than by permission — the same split the
+ * worker's dashboard already uses. Acronyms, so they are not translated.
+ */
+const WORKER_TYPES = [
+  { value: 'asha', label: 'ASHA', hint: 'Accredited Social Health Activist' },
+  { value: 'anm', label: 'ANM', hint: 'Auxiliary Nurse Midwife' },
+  { value: 'cho', label: 'CHO', hint: 'Community Health Officer' }
+]
 
 export default function LoginSignup() {
   const [isLogin, setIsLogin] = useState(true)
@@ -52,6 +64,11 @@ export default function LoginSignup() {
         const age = Number(form.age)
         if (!Number.isFinite(age) || age < 1 || age > 120) next.age = t('auth.errors.ageInvalid')
       }
+      // Both are what the account is scoped by, so neither can be skipped.
+      if (form.role === 'health_worker') {
+        if (!form.workerType) next.workerType = t('auth.errors.workerTypeRequired')
+        if (!(form.village || '').trim()) next.village = t('auth.errors.villageRequired')
+      }
     }
 
     setErrors(next)
@@ -79,12 +96,15 @@ export default function LoginSignup() {
           password: form.password
         })
         login(data.token, data.user)
-        // Every role has a route named after it — the old ternary had no
-        // hospital branch, so hospital users were bounced back to the
-        // landing page after a successful sign-in.
+        /**
+         * The route is looked up, not spelled out. Every other role's path
+         * happens to equal its name, which is why this was interpolated — but
+         * health_worker carries an underscore the URL does not, so signing in
+         * sent them to /health_worker and straight into "Page not found".
+         */
         const returnTo = sessionStorage.getItem('auth:returnTo')
         sessionStorage.removeItem('auth:returnTo')
-        navigate(returnTo || location.state?.from || `/${data.user.role}`, { replace: true })
+        navigate(returnTo || location.state?.from || homePathFor(data.user.role), { replace: true })
       } else {
         await api.post('/auth/register', {
           name: form.name.trim(),
@@ -93,6 +113,7 @@ export default function LoginSignup() {
           role: form.role,
           age: form.age,
           village: form.village,
+          workerType: form.workerType,
           specialization: form.specialization,
           qualification: form.qualification,
           availability: form.availability
@@ -177,6 +198,38 @@ export default function LoginSignup() {
                         {(props) => <Input {...props} type="text" value={form.village || ''} onChange={set('village')} />}
                       </Field>
                     </div>
+                  )}
+
+                  {form.role === 'health_worker' && (
+                    <>
+                      <Field label={t('auth.workerType')} error={errors.workerType} required>
+                        {(props) => (
+                          <Select {...props} value={form.workerType || ''} onChange={set('workerType')} error={errors.workerType}>
+                            <option value="">{t('auth.workerTypePlaceholder')}</option>
+                            {WORKER_TYPES.map(w => (
+                              <option key={w.value} value={w.value}>{w.label} — {w.hint}</option>
+                            ))}
+                          </Select>
+                        )}
+                      </Field>
+
+                      <Field
+                        label={t('auth.village')}
+                        error={errors.village}
+                        hint={t('auth.villageWorkerHint')}
+                        required
+                      >
+                        {(props) => (
+                          <Input {...props} type="text" value={form.village || ''}
+                            onChange={set('village')} error={errors.village} />
+                        )}
+                      </Field>
+
+                      {/* Said plainly at sign-up rather than discovered later: the
+                          account starts covering one village and is not attached
+                          to a facility until someone at that facility attaches it. */}
+                      <Alert tone="info">{t('auth.workerNotice')}</Alert>
+                    </>
                   )}
 
                   {form.role === 'doctor' && (

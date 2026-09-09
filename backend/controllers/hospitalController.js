@@ -255,3 +255,76 @@ export const getPharmaciesInHospital = async (req, res) => {
         res.status(500).json({ message: e.message });
     }
 };
+/**
+ * A facility's frontline workers.
+ *
+ * Mirrors the doctor functions above: the hospital is looked up from the
+ * authenticated owner, so a body claiming a different hospitalId reaches
+ * nothing. Attachment is written to User.hospitalId, which is the field every
+ * referral, encounter and assisted appointment already derives from — there is
+ * no second relationship to keep in step.
+ */
+export const getHealthWorkersInHospital = async (req, res) => {
+    try {
+        const hospital = await Hospital.findOne({ ownerId: req.user.id });
+        if (!hospital) return res.status(404).json({ message: 'Hospital profile not found' });
+
+        const [attached, unattached] = await Promise.all([
+            User.find({ role: 'health_worker', hospitalId: hospital._id })
+                .select('name email workerType village catchmentVillages').lean(),
+            // Offered for attaching. A worker already at another facility is
+            // not shown: they belong to one facility, and poaching them here
+            // would silently detach them from somewhere else.
+            User.find({ role: 'health_worker', $or: [{ hospitalId: null }, { hospitalId: { $exists: false } }] })
+                .select('name email workerType village catchmentVillages').lean()
+        ]);
+
+        res.json({ attached, unattached });
+    } catch (e) {
+        res.status(500).json({ message: e.message });
+    }
+};
+
+export const addHealthWorkerToHospital = async (req, res) => {
+    try {
+        const { workerId } = req.body;
+        const hospital = await Hospital.findOne({ ownerId: req.user.id });
+        if (!hospital) return res.status(404).json({ message: 'Hospital profile not found' });
+
+        const worker = await User.findById(workerId).select('role hospitalId name');
+        if (!worker || worker.role !== 'health_worker') {
+            return res.status(400).json({ message: 'That user is not a health worker' });
+        }
+        if (worker.hospitalId && String(worker.hospitalId) === String(hospital._id)) {
+            return res.status(400).json({ message: 'Already part of this facility' });
+        }
+        if (worker.hospitalId) {
+            return res.status(409).json({ message: 'This worker already belongs to another facility' });
+        }
+
+        await User.findByIdAndUpdate(workerId, { hospitalId: hospital._id });
+        res.json({ message: 'Health worker added successfully' });
+    } catch (e) {
+        res.status(500).json({ message: e.message });
+    }
+};
+
+export const removeHealthWorkerFromHospital = async (req, res) => {
+    try {
+        const { workerId } = req.body;
+        const hospital = await Hospital.findOne({ ownerId: req.user.id });
+        if (!hospital) return res.status(404).json({ message: 'Hospital profile not found' });
+
+        const worker = await User.findById(workerId).select('role hospitalId');
+        // Only its own. A facility must not be able to detach somebody else's
+        // worker by guessing an id.
+        if (!worker || worker.role !== 'health_worker' || String(worker.hospitalId || '') !== String(hospital._id)) {
+            return res.status(404).json({ message: 'That worker is not part of this facility' });
+        }
+
+        await User.findByIdAndUpdate(workerId, { hospitalId: null });
+        res.json({ message: 'Health worker removed successfully' });
+    } catch (e) {
+        res.status(500).json({ message: e.message });
+    }
+};

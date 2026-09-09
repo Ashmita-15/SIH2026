@@ -6,6 +6,9 @@ import {
     updateHospitalProfile,
     addDoctorToHospital,
     removeDoctorFromHospital,
+    addHealthWorkerToHospital,
+    removeHealthWorkerFromHospital,
+    getHealthWorkersInHospital,
     addPharmacyToHospital,
     removePharmacyFromHospital,
     getDoctorsInHospital,
@@ -28,5 +31,10 @@ router.get('/doctors', authRequired, authorizeRoles('hospital'), getDoctorsInHos
 router.post('/pharmacies/add', authRequired, authorizeRoles('hospital'), addPharmacyToHospital);
 router.delete('/pharmacies/remove', authRequired, authorizeRoles('hospital'), removePharmacyFromHospital);
 router.get('/pharmacies', authRequired, authorizeRoles('hospital'), getPharmaciesInHospital);
+
+// Frontline workers. Same shape as the doctor routes above.
+router.post('/health-workers/add', authRequired, authorizeRoles('hospital'), addHealthWorkerToHospital);
+router.delete('/health-workers/remove', authRequired, authorizeRoles('hospital'), removeHealthWorkerFromHospital);
+router.get('/health-workers', authRequired, authorizeRoles('hospital'), getHealthWorkersInHospital);
 
 export default router;

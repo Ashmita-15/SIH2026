@@ -162,8 +162,14 @@
       "passwordRequired": "ਕਿਰਪਾ ਕਰਕੇ ਪਾਸਵਰਡ ਲਿਖੋ।",
       "passwordShort": "ਘੱਟੋ-ਘੱਟ 6 ਅੱਖਰ ਵਰਤੋ।",
       "confirmMismatch": "ਦੋਵੇਂ ਪਾਸਵਰਡ ਇੱਕੋ ਜਿਹੇ ਨਹੀਂ ਹਨ।",
-      "ageInvalid": "ਕਿਰਪਾ ਕਰਕੇ 1 ਤੋਂ 120 ਵਿਚਕਾਰ ਉਮਰ ਲਿਖੋ।"
-    }
+      "ageInvalid": "ਕਿਰਪਾ ਕਰਕੇ 1 ਤੋਂ 120 ਵਿਚਕਾਰ ਉਮਰ ਲਿਖੋ।",
+      "workerTypeRequired": "ASHA, ANM ਜਾਂ CHO ਚੁਣੋ",
+      "villageRequired": "ਪਿੰਡ ਜ਼ਰੂਰੀ ਹੈ"
+    },
+    "workerType": "ਤੁਹਾਡੀ ਭੂਮਿਕਾ",
+    "workerTypePlaceholder": "ASHA, ANM ਜਾਂ CHO ਚੁਣੋ…",
+    "villageWorkerHint": "ਉਹ ਪਿੰਡ ਜਿੱਥੇ ਤੁਸੀਂ ਕੰਮ ਕਰਦੇ ਹੋ। ਬਾਅਦ ਵਿੱਚ ਹੋਰ ਪਿੰਡ ਜੋੜੇ ਜਾ ਸਕਦੇ ਹਨ।",
+    "workerNotice": "ਸ਼ੁਰੂ ਵਿੱਚ ਤੁਹਾਡਾ ਖਾਤਾ ਸਿਰਫ਼ ਇਸੇ ਪਿੰਡ ਲਈ ਹੋਵੇਗਾ। ਰੈਫ਼ਰਲ ਅਤੇ ਸੰਸਥਾ ਨਾਲ ਜੁੜੀਆਂ ਸਹੂਲਤਾਂ ਉਦੋਂ ਤੱਕ ਬੰਦ ਰਹਿਣਗੀਆਂ ਜਦੋਂ ਤੱਕ ਤੁਹਾਡਾ PHC ਜਾਂ ਹਸਪਤਾਲ ਤੁਹਾਨੂੰ ਆਪਣੀ ਸੰਸਥਾ ਵਿੱਚ ਨਹੀਂ ਜੋੜਦਾ।"
   },
   "status": {
     "appointment": {
@@ -638,7 +644,8 @@
     "hospital": {
       "overview": "ਸਾਰ",
       "referrals": "ਰੈਫ਼ਰਲ",
-      "coordination": "ਤਾਲਮੇਲ"
+      "coordination": "ਤਾਲਮੇਲ",
+      "staff": "ਸਿਹਤ ਕਰਮਚਾਰੀ"
     },
     "health_worker": {
       "overview": "ਕੰਮ ਸੂਚੀ",
@@ -756,5 +763,28 @@
     "today": "ਅੱਜ",
     "tomorrow": "ਭਲਕੇ",
     "day_after": "ਪਰਸੋਂ"
+  },
+  "staff": {
+    "title": "ਸਿਹਤ ਕਰਮਚਾਰੀ",
+    "subtitle": "ਇਸ ਸੰਸਥਾ ਨਾਲ ਜੁੜੇ ASHA, ANM ਅਤੇ CHO",
+    "attached": "ਇਸ ਸੰਸਥਾ ਵਿੱਚ ({{count}})",
+    "available": "ਜੁੜਨ ਲਈ ({{count}})",
+    "attach": "ਜੋੜੋ",
+    "remove": "ਹਟਾਓ",
+    "added": "{{name}} ਨੂੰ ਜੋੜਿਆ ਗਿਆ",
+    "removed": "{{name}} ਨੂੰ ਹਟਾਇਆ ਗਿਆ",
+    "noneAttached": "ਹਾਲੇ ਕੋਈ ਕਰਮਚਾਰੀ ਨਹੀਂ",
+    "noneAttachedHelp": "ਕਰਮਚਾਰੀ ਜੋੜੋ ਤਾਂ ਜੋ ਉਨ੍ਹਾਂ ਦੇ ਰੈਫ਼ਰਲ ਇਸ ਸੰਸਥਾ ਦੇ ਨਾਂ ਦਰਜ ਹੋਣ।",
+    "noneAvailable": "ਕੋਈ ਉਡੀਕ ਵਿੱਚ ਨਹੀਂ",
+    "noneAvailableHelp": "ਬਿਨਾਂ ਸੰਸਥਾ ਵਾਲੇ ਖਾਤੇ ਇੱਥੇ ਦਿਖਣਗੇ।"
+  },
+  "queue": {
+    "position": "ਤੁਸੀਂ ਕਤਾਰ ਵਿੱਚ {{n}} ਨੰਬਰ ਉੱਤੇ ਹੋ",
+    "ahead": "ਤੁਹਾਡੇ ਤੋਂ ਪਹਿਲਾਂ ਲਗਭਗ {{n}} ਲੋਕ",
+    "eta": "ਪਹੁੰਚਣ ਦਾ ਅੰਦਾਜ਼ਨ ਸਮਾਂ: ਲਗਭਗ {{time}}",
+    "approx": "ਇਹ ਅੰਦਾਜ਼ਾ ਹੈ, ਪੱਕਾ ਸਮਾਂ ਨਹੀਂ।",
+    "full": "ਇਸ ਦਿਨ ਸਾਰੇ ਸਮੇਂ ਭਰ ਗਏ ਹਨ",
+    "alternatives": "ਹੋਰ ਵਿਕਲਪ",
+    "tier": "ਤਰਜੀਹ"
   }
 }

@@ -162,8 +162,14 @@
       "passwordRequired": "Please enter a password.",
       "passwordShort": "Use at least 6 characters.",
       "confirmMismatch": "The two passwords don't match.",
-      "ageInvalid": "Please enter an age between 1 and 120."
-    }
+      "ageInvalid": "Please enter an age between 1 and 120.",
+      "workerTypeRequired": "Choose ASHA, ANM or CHO",
+      "villageRequired": "Village is required"
+    },
+    "workerType": "Your role",
+    "workerTypePlaceholder": "Select ASHA, ANM or CHO…",
+    "villageWorkerHint": "The village you work in. You can be given more villages later.",
+    "workerNotice": "Your account will cover this one village to begin with. Referrals and facility features stay locked until your PHC or hospital adds you to their facility."
   },
   "status": {
     "appointment": {
@@ -638,7 +644,8 @@
     "hospital": {
       "overview": "Overview",
       "referrals": "Referrals",
-      "coordination": "Coordination"
+      "coordination": "Coordination",
+      "staff": "Health workers"
     },
     "health_worker": {
       "overview": "Worklist",
@@ -756,5 +763,28 @@
     "today": "today",
     "tomorrow": "tomorrow",
     "day_after": "the day after tomorrow"
+  },
+  "staff": {
+    "title": "Health workers",
+    "subtitle": "ASHA, ANM and CHO staff attached to this facility",
+    "attached": "At this facility ({{count}})",
+    "available": "Waiting to be added ({{count}})",
+    "attach": "Add",
+    "remove": "Remove",
+    "added": "{{name}} added to this facility",
+    "removed": "{{name}} removed",
+    "noneAttached": "No health workers yet",
+    "noneAttachedHelp": "Add a worker so their referrals and visits are recorded against this facility.",
+    "noneAvailable": "Nobody waiting",
+    "noneAvailableHelp": "Health workers who sign up without a facility appear here."
+  },
+  "queue": {
+    "position": "You are number {{n}} in the queue",
+    "ahead": "≈ {{n}} people before you",
+    "eta": "Estimated reporting time: approximately {{time}}",
+    "approx": "This is an estimate, not a fixed time.",
+    "full": "This day is fully booked",
+    "alternatives": "Other options",
+    "tier": "Priority"
   }
 }
