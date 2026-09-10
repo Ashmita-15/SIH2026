@@ -4,7 +4,7 @@ import fs from 'fs';
 import { fileURLToPath } from 'url';
 import { authRequired } from '../middleware/authMiddleware.js';
 import { uploadAppointmentMedia, handleUploadErrors } from '../middleware/uploadMiddleware.js';
-import { bookAppointment, getAppointmentsForPatient, getAppointmentsForDoctor, confirmAppointment, rejectAppointment, completeAppointment, cancelAppointment, getDoctorAvailability, getDoctorQueue } from '../controllers/appointmentController.js';
+import { bookAppointment, getAppointmentsForPatient, getAppointmentsForDoctor, confirmAppointment, rejectAppointment, completeAppointment, cancelAppointment, getDoctorAvailability, getDoctorQueue, emailMyQueueStatus } from '../controllers/appointmentController.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -18,6 +18,9 @@ router.get('/doctor/:id', authRequired, getAppointmentsForDoctor);
 router.get('/doctor/:doctorId/availability', authRequired, getDoctorAvailability);
 // Derived, read-only view over the appointments above.
 router.get('/queue', authRequired, getDoctorQueue);
+// Patient-triggered: emails the caller their current approximate queue
+// position. Separate from the read above so polling it never sends mail.
+router.post('/queue/notify', authRequired, emailMyQueueStatus);
 router.put('/:id/confirm', authRequired, confirmAppointment);
 router.put('/:id/reject', authRequired, rejectAppointment);
 router.put('/:id/complete', authRequired, completeAppointment);
@@ -40,5 +43,3 @@ router.get('/media/:filename', authRequired, (req, res) => {
 });
 
 export default router;
-
-

@@ -9,7 +9,7 @@ import HealthRecord from '../models/HealthRecord.js';
 import User from '../models/User.js';
 import * as tasks from './taskService.js';
 import { badRequest, forbidden, notFound, conflict } from './errors.js';
-
+import { notifyReferralCreated, notifyReferralStatusChanged } from './notifications/notificationService.js';
 /**
  * Referral business logic.
  *
@@ -30,6 +30,7 @@ import { badRequest, forbidden, notFound, conflict } from './errors.js';
  * patient who did not come once is usually rebooked rather than abandoned,
  * and lapsed is the deliberate decision to stop trying.
  */
+
 const ALLOWED_NEXT = {
     created: ['acknowledged', 'declined', 'redirected', 'lapsed'],
     acknowledged: ['scheduled', 'declined', 'redirected', 'lapsed'],
@@ -173,11 +174,11 @@ export async function createReferral(input, ctx) {
         throw badRequest('A referral must go to a different facility');
     }
 
-    const patient = await User.findById(patientId).select('role');
+    const patient = await User.findById(patientId).select('role name email');
     if (!patient) throw notFound('Patient not found');
     if (patient.role !== 'patient') throw badRequest('That user is not a patient');
 
-    const destination = await Hospital.findById(toFacilityId).select('name isActive ownerId level');
+    const destination = await Hospital.findById(toFacilityId).select('name isActive ownerId level email');
     if (!destination) throw notFound('Destination facility not found');
     if (!destination.isActive) throw badRequest('That destination facility is not active');
 
@@ -222,18 +223,25 @@ export async function createReferral(input, ctx) {
      * shows up as late work rather than staying invisible until someone looks.
      */
     await tasks.onReferralCreated(referral, toFacilityId);
-
     announce(ctx?.io, 'referral:created',
         [`user_${destination.ownerId}`, `user_${patientId}`],
         { referralId: referral._id, code: referral.referralId, priority, dueBy: referral.dueBy });
-
+    Hospital.findById(fromFacilityId).select('name').then(fromFacility => {
+        notifyReferralCreated({
+            referral,
+            patient,
+            fromFacilityName: fromFacility?.name,
+            toFacilityEmail: destination.email,
+            toFacilityName: destination.name
+        }).catch(() => {});
+    }).catch(() => {});
     return getReferralById(referral._id, ctx);
 }
 
 // ─── Reads ───────────────────────────────────────────────────────────────────
 
 const POPULATE = [
-    { path: 'patientId', select: 'name age village phone' },
+    { path: 'patientId', select: 'name age village phone email' },
     { path: 'fromFacilityId', select: 'name level phone address' },
     { path: 'toFacilityId', select: 'name level phone address' },
     { path: 'createdBy', select: 'name role workerType specialization' }
@@ -401,7 +409,13 @@ export async function transitionReferral(id, toStatus, payload = {}, ctx) {
     announce(ctx?.io, 'referral:updated',
         [`user_${origin?.ownerId}`, `user_${destination?.ownerId}`, `user_${referral.patientId?._id || referral.patientId}`],
         { referralId: referral._id, code: referral.referralId, status: toStatus, by: actor.name });
-
+    notifyReferralStatusChanged({
+        referral,
+        patient: referral.patientId,
+        toFacilityName: referral.toFacilityId?.name,
+        status: toStatus,
+        note
+    }).catch(() => {});
     return referral;
 }
 

@@ -2,7 +2,7 @@ import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import User from '../models/User.js';
 import Hospital from '../models/Hospital.js';
-
+import { notifyAccountCreated } from '../services/notifications/notificationService.js';
 export const register = async (req, res) => {
     try {
         const { name, email, password, role, age, village, specialization, qualification, availability, workerType } = req.body;
@@ -49,7 +49,9 @@ export const register = async (req, res) => {
             // Regular user registration
             user = await User.create({ name, email, passwordHash, role, age, village, specialization, qualification, availability });
         }
-        
+        // Fire-and-forget: a slow or failing mail server must never delay
+        // or break the response to a successful registration.
+        notifyAccountCreated(user).catch(() => {});
         return res.status(201).json({ id: user._id, name: user.name, email: user.email, role: user.role });
     } catch (e) {
         return res.status(500).json({ message: e.message });

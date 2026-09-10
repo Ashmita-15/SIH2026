@@ -2,7 +2,7 @@ import { createReport } from '../lib/pdfReport.js';
 import HealthRecord from '../models/HealthRecord.js';
 import Appointment from '../models/Appointment.js';
 import User from '../models/User.js';
-
+import { notifyHealthRecordUploaded } from '../services/notifications/notificationService.js';
 /**
  * Decides whether the caller may see this patient's records.
  *
@@ -35,6 +35,17 @@ export const createRecord = async (req, res) => {
         }
         const rec = await HealthRecord.create({ patientId, appointmentId, diagnosis, prescription });
         res.status(201).json(rec);
+
+        // Fire-and-forget: let the patient know a new record was added to
+        // their file. req.user is the doctor who is authoring it (route is
+        // restricted to role 'doctor'); this only needs the patient's email.
+        User.findById(patientId).select('name email').then(patient => {
+            notifyHealthRecordUploaded({
+                recipient: patient,
+                uploadedBy: { name: req.user.name, role: 'doctor' },
+                record: rec
+            }).catch(() => {});
+        }).catch(() => {});
     } catch (e) {
         res.status(500).json({ message: e.message });
     }

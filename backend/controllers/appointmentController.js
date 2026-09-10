@@ -2,7 +2,13 @@ import Appointment from '../models/Appointment.js';
 import { SLOTS, isValidSlot } from '../config/slots.js';
 import User from '../models/User.js';
 import { buildQueue, findAlternatives } from '../services/queueService.js';
-
+import {
+    notifyAppointmentBooked,
+    notifyAppointmentConfirmed,
+    notifyAppointmentRejected,
+    notifyAppointmentCancelled,
+    notifyQueueStatus
+} from '../services/notifications/notificationService.js';
 /**
  * Confirming, rejecting and completing all took the appointment id straight
  * from the URL and wrote to it, so any signed-in account could accept or
@@ -151,13 +157,18 @@ export const bookAppointment = async (req, res) => {
         
         // Populate doctor and patient details for response
         const populatedAppointment = await Appointment.findById(appointment._id)
-            .populate('doctorId', 'name specialization qualification')
-            .populate('patientId', 'name age village');
+            .populate('doctorId', 'name specialization qualification email')
+            .populate('patientId', 'name age village email');
         
         res.status(201).json({
             message: 'Appointment request submitted successfully. The doctor will review and confirm your appointment.',
             appointment: populatedAppointment
         });
+        notifyAppointmentBooked({
+            patient: populatedAppointment.patientId,
+            doctor: populatedAppointment.doctorId,
+            appointment: populatedAppointment
+        }).catch(() => {});
     } catch (e) {
         /**
          * The race actually being lost. Two requests passed the check above,
@@ -243,7 +254,7 @@ export const confirmAppointment = async (req, res) => {
             },
             { new: true }
         ).populate('patientId', 'name age village email')
-         .populate('doctorId', 'name specialization qualification');
+         .populate('doctorId', 'name specialization qualification email');
         
         if (!appointment) {
             return res.status(404).json({ message: 'Appointment not found' });
@@ -253,6 +264,23 @@ export const confirmAppointment = async (req, res) => {
             message: 'Appointment confirmed successfully',
             appointment
         });
+        (async () => {
+            let queueInfo = null;
+            try {
+                const dateKey = new Date(confirmedDate).toISOString().split('T')[0];
+                const queue = await buildQueue({ doctorId: appointment.doctorId._id, date: dateKey });
+                const mine = queue.find(q => String(q.patientId || '') === String(appointment.patientId._id));
+                if (mine) queueInfo = { position: mine.position, estimatedAt: mine.estimatedAt };
+            } catch (err) {
+                console.error('[notify] Could not compute queue info for confirmation email:', err.message);
+            }
+            await notifyAppointmentConfirmed({
+                patient: appointment.patientId,
+                doctor: appointment.doctorId,
+                appointment,
+                queueInfo
+            });
+        })().catch(() => {});
     } catch (e) {
         res.status(500).json({ message: e.message });
     }
@@ -274,7 +302,7 @@ export const rejectAppointment = async (req, res) => {
             },
             { new: true }
         ).populate('patientId', 'name age village email')
-         .populate('doctorId', 'name specialization qualification');
+         .populate('doctorId', 'name specialization qualification email');
         
         if (!appointment) {
             return res.status(404).json({ message: 'Appointment not found' });
@@ -284,6 +312,11 @@ export const rejectAppointment = async (req, res) => {
             message: 'Appointment rejected',
             appointment
         });
+        notifyAppointmentRejected({
+            patient: appointment.patientId,
+            doctor: appointment.doctorId,
+            appointment
+        }).catch(() => {});
     } catch (e) {
         res.status(500).json({ message: e.message });
     }
@@ -348,10 +381,15 @@ export const cancelAppointment = async (req, res) => {
         await appointment.save();
 
         const populated = await Appointment.findById(id)
-            .populate('doctorId', 'name specialization qualification')
+            .populate('doctorId', 'name specialization qualification email')
             .populate('patientId', 'name age village email');
 
         res.json({ message: 'Appointment cancelled', appointment: populated });
+        notifyAppointmentCancelled({
+            patient: populated.patientId,
+            doctor: populated.doctorId,
+            appointment: populated
+        }).catch(() => {});
     } catch (e) {
         res.status(500).json({ message: e.message });
     }
@@ -406,7 +444,44 @@ export const getDoctorAvailability = async (req, res) => {
     }
 };
 
+export const emailMyQueueStatus = async (req, res) => {
+    try {
+        if (req.user?.role !== 'patient') {
+            return res.status(403).json({ message: 'Only a patient can request their own queue status by email' });
+        }
+        const { doctorId, date } = req.body;
+        if (!doctorId || !date || Number.isNaN(new Date(date).getTime())) {
+            return res.status(400).json({ message: 'doctorId and a valid date are required' });
+        }
 
+        const [doctor, patient] = await Promise.all([
+            User.findById(doctorId).select('role name'),
+            User.findById(req.user.id).select('name email')
+        ]);
+        if (!doctor || doctor.role !== 'doctor') {
+            return res.status(404).json({ message: 'Doctor not found' });
+        }
+
+        const queue = await buildQueue({ doctorId, date });
+        const mine = queue.find(q => String(q.patientId || '') === String(req.user.id));
+        if (!mine) {
+            return res.status(404).json({ message: 'You do not have a booking in this queue for that day' });
+        }
+
+        await notifyQueueStatus({
+            patient,
+            doctor,
+            date,
+            position: mine.position,
+            aheadOfYou: mine.aheadOfYou,
+            estimatedAt: mine.estimatedAt
+        });
+
+        res.json({ message: 'Queue status emailed to you', position: mine.position, estimatedAt: mine.estimatedAt });
+    } catch (e) {
+        res.status(500).json({ message: e.message });
+    }
+};
 /**
  * The day's queue for one doctor, and where else to go if it is full.
  *
