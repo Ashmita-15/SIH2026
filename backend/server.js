@@ -37,7 +37,7 @@ const allowedOrigins = [
     'http://localhost:5175',
     'http://localhost:5176',
     'http://localhost:3000',
-    'https://sih-2026-roan.vercel.app/'
+    'https://sih-2026-roan.vercel.app'
 ];
 
 const io = new SocketIOServer(server, {
