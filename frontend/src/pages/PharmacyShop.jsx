@@ -37,7 +37,11 @@ export default function PharmacyShop() {
   const [loadError, setLoadError] = useState(false)
 
   useEffect(() => {
-    const socket = io(SOCKET_URL)
+    const socket = io(SOCKET_URL, {
+      reconnectionAttempts: 5,
+      reconnectionDelay: 2500,
+      timeout: 10000
+    })
     
     // Subscribe to real-time stock updates for this pharmacy
     socket.emit('subscribe-pharmacy-updates', pharmacyId)

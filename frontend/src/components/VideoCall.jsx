@@ -8,6 +8,7 @@ import Card, { CardBody } from './ui/Card'
 import Button, { IconButton } from './ui/Button'
 import Avatar from './ui/Avatar'
 import Alert from './ui/Alert'
+import OfflinePlaceholder from './offline/OfflinePlaceholder'
 
 /**
  * The socket is created when a call actually starts rather than at module
@@ -32,6 +33,24 @@ export default function VideoCall({ roomId, perspective = 'patient', onLeave }) 
   const [audioOn, setAudioOn] = useState(true)
   const [videoOn, setVideoOn] = useState(true)
   const [counterpart, setCounterpart] = useState(null)
+  const [isOnline, setIsOnline] = useState(() => (typeof navigator !== 'undefined' ? navigator.onLine : true))
+
+  useEffect(() => {
+    const handleOffline = () => {
+      setIsOnline(false)
+      setError(t('consultation.errors.offline', 'Internet connection required for video consultation.'))
+    }
+    const handleOnline = () => {
+      setIsOnline(true)
+      setError('')
+    }
+    window.addEventListener('offline', handleOffline)
+    window.addEventListener('online', handleOnline)
+    return () => {
+      window.removeEventListener('offline', handleOffline)
+      window.removeEventListener('online', handleOnline)
+    }
+  }, [t])
 
   const counterpartLabel = counterpart?.name
     || (perspective === 'patient' ? t('consultation.otherPerson') : t('consultation.otherPersonPatient'))
@@ -156,6 +175,25 @@ export default function VideoCall({ roomId, perspective = 'patient', onLeave }) 
     return <Card><CardBody><Alert tone="warning">{t('consultation.errors.noRoom')}</Alert></CardBody></Card>
   }
 
+  if (!isOnline && !connected) {
+    return (
+      <div className="py-6">
+        <OfflinePlaceholder
+          title={t('consultation.errors.offline', 'Internet connection required for video consultation')}
+          message="Live consultations require an active internet connection. Please reconnect to continue."
+          onRetry={() => {
+            if (typeof navigator !== 'undefined' && navigator.onLine) setIsOnline(true)
+          }}
+        />
+        <div className="text-center mt-4">
+          <Button variant="secondary" onClick={() => { cleanup(); onLeave?.() }}>
+            {t('common.back', 'Go back')}
+          </Button>
+        </div>
+      </div>
+    )
+  }
+
   if (error) {
     return (
       <Card>
@@ -171,7 +209,7 @@ export default function VideoCall({ roomId, perspective = 'patient', onLeave }) 
   }
 
   return (
-    <Card>
+    <Card className="overflow-hidden border border-line" data-active-consultation={connected ? "true" : "false"}>
       <CardBody className="p-0 sm:p-0">
         {/* Remote fills the frame; you are a thumbnail. Two equal 300px
             boxes made the person you're talking to the same size as your

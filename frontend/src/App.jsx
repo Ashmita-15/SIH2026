@@ -4,6 +4,8 @@ import Navbar from './components/Navbar.jsx'
 import AppShell from './components/app/AppShell.jsx'
 import EmergencyButton from './components/EmergencyButton.jsx'
 import AssistantLauncher from './components/patient/Assistant/AssistantLauncher.jsx'
+import NetworkStatusBanner from './components/offline/NetworkStatusBanner.jsx'
+import UpdatePrompt from './components/offline/UpdatePrompt.jsx'
 import { useAuth } from './context/AuthContext.jsx'
 import { homePathFor } from './config/navigation.js'
 import api from './services/api.js'
@@ -138,6 +140,8 @@ export default function App() {
 
       <AssistantLauncher />
       <EmergencyButton />
+      <NetworkStatusBanner />
+      <UpdatePrompt />
     </>
   )
 }

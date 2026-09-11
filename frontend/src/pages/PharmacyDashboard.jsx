@@ -66,7 +66,11 @@ export default function PharmacyDashboard() {
 
   useEffect(() => {
     console.log('PharmacyDashboard mounted, user:', user)
-    const socket = io(SOCKET_URL)
+    const socket = io(SOCKET_URL, {
+      reconnectionAttempts: 5,
+      reconnectionDelay: 2500,
+      timeout: 10000
+    })
     
     // Join pharmacy room for real-time updates
     socket.emit('join-pharmacy-room', user.id)

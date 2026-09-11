@@ -40,9 +40,18 @@ const allowedOrigins = [
     'https://sih-2026-roan.vercel.app'
 ];
 
+const checkOrigin = (origin, callback) => {
+    // Allow requests with no origin (like mobile apps or curl requests)
+    if (!origin) return callback(null, true);
+    if (allowedOrigins.includes(origin) || /^https:\/\/[\w-]+\.vercel\.app$/.test(origin)) {
+        return callback(null, true);
+    }
+    return callback(new Error(`Origin ${origin} not allowed by CORS`));
+};
+
 const io = new SocketIOServer(server, {
     cors: {
-        origin: allowedOrigins,
+        origin: checkOrigin,
         methods: ['GET', 'POST'],
         credentials: true
     }
@@ -53,7 +62,7 @@ await connectDB();
 
 // Middleware
 app.use(cors({
-    origin: allowedOrigins,
+    origin: checkOrigin,
     credentials: true
 }));
 app.use(morgan('dev'));

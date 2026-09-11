@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
 import api, { friendlyError } from '../../services/api'
+import { queueOrExecute } from '../../lib/offline/mutationQueue'
 import { useAuth } from '../../context/AuthContext'
 import { useToast } from '../ui/Toast'
 import { Field, Input, Textarea, Select } from '../ui/Field'
@@ -178,17 +179,20 @@ export default function BookingForm({ selectedDoctor: doctorFromProps, prefillSy
       formData.append('consultationType', consultationType)
       mediaFiles.forEach(file => formData.append('attachments', file))
 
-      await api.post('/appointments/book', formData, {
-        signal: abortRef.current.signal,
-        // The feature exists for people on slow connections — they need to
-        // see it moving, or they assume it froze and upload again.
-        onUploadProgress: (event) => {
-          if (!mediaFiles.length || !event.total) return
-          setUploadPercent(Math.round((event.loaded * 100) / event.total))
-        }
+      const res = await queueOrExecute({
+        userId,
+        type: 'BOOK_APPOINTMENT',
+        endpoint: '/appointments/book',
+        method: 'POST',
+        payload: formData
       })
 
-      toast.success(t('appointments.requestSent'))
+      if (res.queued) {
+        toast.info(t('appointments.savedOffline', 'Appointment saved offline. Will sync automatically when connection returns.'))
+      } else {
+        toast.success(t('appointments.requestSent'))
+      }
+
       setWhen({ date: '', slot: '' })
       setPick({ date: '', sessionId: '', sessionName: '' })
       setSymptoms('')
