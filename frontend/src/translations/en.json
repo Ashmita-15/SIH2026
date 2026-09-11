@@ -633,7 +633,10 @@
       "today": "Today",
       "requests": "Requests",
       "appointments": "Schedule",
-      "patients": "Patients"
+      "patients": "Patients",
+      "sessions": "Sessions",
+      "queue": "Queue",
+      "diagnostics": "Tests"
     },
     "pharmacy": {
       "overview": "Overview",
@@ -761,7 +764,12 @@
     "cancelled": "Alright, I have not booked anything.",
     "today": "today",
     "tomorrow": "tomorrow",
-    "day_after": "the day after tomorrow"
+    "day_after": "the day after tomorrow",
+    "noSessions": "{{doctor}} has no clinic on {{date}}. Which day would suit you?",
+    "askSession": "On {{date}} these sessions are open: {{sessions}}. Which one would you like?",
+    "sessionUnknown": "I did not catch which session. These are open: {{sessions}}.",
+    "queueLater": "Your queue number and arrival time will be given after booking closes, a few hours before the session.",
+    "bookedSession": "Done. Your appointment with {{doctor}} is requested for {{date}}, {{slot}}."
   },
   "staff": {
     "title": "Health workers",
@@ -778,12 +786,116 @@
     "noneAvailableHelp": "Health workers who sign up without a facility appear here."
   },
   "queue": {
-    "position": "You are number {{n}} in the queue",
-    "ahead": "≈ {{n}} people before you",
-    "eta": "Estimated reporting time: approximately {{time}}",
-    "approx": "This is an estimate, not a fixed time.",
-    "full": "This day is fully booked",
-    "alternatives": "Other options",
-    "tier": "Priority"
+    "ahead_one": "About {{count}} person before you",
+    "ahead_other": "About {{count}} people before you",
+    "alt": {
+      "sameDoctorToday": "Same doctor, today",
+      "sameDoctorLaterDay": "Same doctor, another day",
+      "sameFacility": "Same facility",
+      "otherFacility": "Another facility"
+    },
+    "alternatives": "These times are free with other doctors:",
+    "approx": "This is an estimate. Times can change on the day.",
+    "choose": "Choose",
+    "eta": "Estimated time: around {{time}}",
+    "full": "This day is fully booked.",
+    "position": "You are number {{n}}",
+    "title": "Your place in the queue",
+    "pendingSession": "Your queue number will be given after booking closes.",
+    "arriveBy": "Please arrive by {{time}}"
+  },
+  "sessions": {
+    "yours": "Your sessions",
+    "addTitle": "Add a session",
+    "name": "Session name",
+    "namePlaceholder": "e.g. Afternoon OPD",
+    "days": "Working days",
+    "from": "Starts",
+    "to": "Ends",
+    "maxPatients": "Patients per session",
+    "add": "Add session",
+    "remove": "Remove",
+    "added": "Session added",
+    "removed": "Session removed",
+    "none": "No sessions yet",
+    "noneHelp": "Add a session so patients can book a clinic instead of guessing an hour.",
+    "capacity": "{{count}} patients",
+    "pick": "Choose a session",
+    "pickFirst": "Choose a session first",
+    "noneThatDay": "This doctor has no clinic on that day.",
+    "placesLeft": "{{count}} places left",
+    "full": "Full",
+    "closed": "Booking closed",
+    "queueLater": "Your queue number is given after booking closes, a few hours before the session.",
+    "cutoffNote": "Booking closes 4 hours before a session starts. The queue is then set automatically and everyone is emailed.",
+    "day": {
+      "mon": "Mon",
+      "tue": "Tue",
+      "wed": "Wed",
+      "thu": "Thu",
+      "fri": "Fri",
+      "sat": "Sat",
+      "sun": "Sun"
+    }
+  },
+  "sessionQueue": {
+    "none": "No finalized sessions yet",
+    "noneHelp": "A session queue appears here once booking closes.",
+    "total": "{{count}} patients",
+    "age": "Age {{count}}"
+  },
+  "diagnostics": {
+    "title": "My tests",
+    "subtitle": "Tests your doctor has ordered, and their results.",
+    "none": "No tests yet",
+    "noneHelp": "When a doctor orders a test it appears here with its progress.",
+    "queueNone": "No test requests",
+    "queueNoneHelp": "Tests ordered by you or your facility appear here.",
+    "reason": "Reason",
+    "result": "Result",
+    "resultSummary": "Result summary",
+    "resultNotes": "Notes",
+    "resultPlaceholder": "e.g. Hb 11.2 g/dL, WBC normal",
+    "saveResult": "Save result",
+    "openReport": "Open report",
+    "urgent": "Urgent",
+    "patient": "Patient",
+    "status": {
+      "requested": "Requested",
+      "scheduled": "Scheduled",
+      "sample_collected": "Sample collected",
+      "completed": "Completed",
+      "cancelled": "Cancelled"
+    },
+    "action": {
+      "scheduled": "Mark scheduled",
+      "sample_collected": "Sample collected",
+      "completed": "Add result",
+      "cancelled": "Cancel"
+    },
+    "moved": {
+      "scheduled": "Marked as scheduled",
+      "sample_collected": "Sample recorded",
+      "completed": "Result saved",
+      "cancelled": "Test cancelled"
+    }
+  },
+  "triage": {
+    "level": {
+      "EMERGENCY": "Seek emergency care now",
+      "URGENT_24H": "See a doctor within 24 hours",
+      "URGENT_72H": "See a doctor within 3 days",
+      "ROUTINE": "A routine appointment is fine",
+      "NEEDS_ASSESSMENT": "Needs a proper check"
+    },
+    "action": {
+      "EMERGENCY": "Call 108 for an ambulance, or use the Emergency button on this screen.",
+      "URGENT_24H": "Please book a consultation today.",
+      "URGENT_72H": "Please book a consultation in the next three days.",
+      "ROUTINE": "You can book a normal appointment whenever it suits you.",
+      "NEEDS_ASSESSMENT": "Tell me a little more about what you are feeling, or see a health worker."
+    },
+    "book": "Book an appointment",
+    "disclaimer": "This is guidance to help you decide when to be seen. It is not a diagnosis."
   }
 }

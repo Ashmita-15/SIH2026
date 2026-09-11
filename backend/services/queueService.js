@@ -313,3 +313,80 @@ export async function findAlternatives({ doctorId, date, days = 7, limit = 6 }) 
 
     return out.slice(0, limit);
 }
+
+// ─── Session finalisation ───────────────────────────────────────────────────
+
+/**
+ * Fix the order for one session, once, at its cutoff.
+ *
+ * The ordering rules are the ones above — a clinician's referral priority
+ * first, a one-step lift for the recognised care groups, then first-come
+ * first-served. Nothing new decides anything; this only freezes the result so
+ * it stops changing.
+ *
+ * Freezing is the point. Before the cutoff a position would move every time
+ * somebody else booked, which is worse than no number at all. Afterwards the
+ * snapshot is authoritative: a cancellation frees capacity for the clinic but
+ * does not renumber anyone, because a patient who has already set out for a
+ * 2:40 arrival must not be told at noon that they are now 2:10.
+ */
+export async function computeSessionOrder({ doctorId, sessionId, date }) {
+    const day = new Date(`${String(date).slice(0, 10)}T00:00:00.000Z`);
+
+    const appointments = await Appointment.find({
+        doctorId, sessionId, requestedDate: day,
+        status: { $in: ['pending', 'confirmed'] }
+    }).select('patientId status createdAt').lean();
+
+    if (!appointments.length) return [];
+
+    const patientIds = [...new Set(appointments.map(a => String(a.patientId)))];
+    const [patients, referralMap] = await Promise.all([
+        User.find({ _id: { $in: patientIds } }).select('name age email').lean(),
+        referralsByPatient(patientIds)
+    ]);
+    const patientMap = new Map(patients.map(p => [String(p._id), p]));
+
+    const rows = [];
+    for (const appt of appointments) {
+        const key = String(appt.patientId);
+        const patient = patientMap.get(key);
+        const referral = referralMap.get(key) || null;
+        const groups = await vulnerabilityFor(appt.patientId, patient);
+        const base = tierFor({ referral });
+        rows.push({
+            appointmentId: appt._id,
+            patientId: appt.patientId,
+            patientName: patient?.name || 'Patient',
+            patientEmail: patient?.email || null,
+            tier: applyVulnerabilityModifier(base, groups),
+            priorityGroups: groups,
+            referralPriority: referral?.priority || null,
+            requestedAt: appt.createdAt
+        });
+    }
+
+    // Priority, then arrival order. `_id` last so a tie between two requests
+    // created in the same millisecond still resolves the same way every run —
+    // an order that is deterministic only most of the time is not one.
+    rows.sort((a, b) =>
+        a.tier - b.tier ||
+        new Date(a.requestedAt) - new Date(b.requestedAt) ||
+        String(a.appointmentId).localeCompare(String(b.appointmentId))
+    );
+
+    return rows.map((r, i) => ({ ...r, position: i + 1 }));
+}
+
+/**
+ * Arrival times spread across the session the doctor actually declared.
+ *
+ * The session's own length divided by the people who actually booked, rather
+ * than a fixed minutes-per-patient: a half-full afternoon should not tell the
+ * last patient to arrive an hour after the doctor has gone home.
+ */
+export function arrivalTimes({ startsAt, endsAt, count }) {
+    const span = Math.max(0, new Date(endsAt) - new Date(startsAt));
+    const per = count > 0 ? Math.floor(span / count) : 0;
+    return (index) => new Date(new Date(startsAt).getTime() + per * index);
+}

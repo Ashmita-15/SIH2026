@@ -33,7 +33,9 @@ function fmtDate(date) {
     try {
         return new Date(date).toLocaleString('en-IN', {
             weekday: 'short', day: 'numeric', month: 'short', year: 'numeric',
-            hour: '2-digit', minute: '2-digit'
+            hour: '2-digit', minute: '2-digit',
+            // The clinic's clock, not the server's.
+            timeZone: process.env.CLINIC_TZ || 'Asia/Kolkata'
         });
     } catch {
         return String(date);
@@ -237,7 +239,70 @@ export function referralStatusChangedEmail({ patientName, toFacilityName, status
     };
 }
 
+// ─── Session queue ──────────────────────────────────────────────────────────
+
+export function queueFinalizedEmail({ patientName, doctorName, facilityName, date, sessionName, position, estimatedArrivalTime, totalPatients }) {
+    return {
+        subject: `Your queue number for ${date} - GramSathi`,
+        html: wrapEmail({
+            title: `You are number ${position} in the queue`,
+            bodyHtml: `
+                <p>Hello ${patientName || 'there'}, booking for this session has now closed and your place is confirmed.</p>
+                ${infoRow('Doctor', doctorName)}
+                ${infoRow('Facility', facilityName)}
+                ${infoRow('Date', date)}
+                ${infoRow('Session', sessionName)}
+                ${infoRow('Your queue number', `<strong>${position}</strong> of ${totalPatients}`)}
+                ${infoRow('Please arrive by', fmtDate(estimatedArrivalTime))}
+                <p style="margin-top:16px; padding:12px; background:#fef3c7; border-radius:6px; color:#92400e;">
+                  <strong>Your arrival time is an estimate.</strong> Consultations can run early or late.
+                  Please be ready from a little before this time.
+                </p>
+                <p>Your queue number will not change.</p>
+            `
+        })
+    };
+}
+
+export function doctorSessionScheduleEmail({ doctorName, facilityName, date, sessionName, startsAt, endsAt, totalPatients, entries }) {
+    const rows = (entries || []).map(e => `
+        <tr>
+          <td style="padding:6px 10px; border-bottom:1px solid #e5e7eb;">${e.position}</td>
+          <td style="padding:6px 10px; border-bottom:1px solid #e5e7eb;">${e.patientName}</td>
+          <td style="padding:6px 10px; border-bottom:1px solid #e5e7eb;">${fmtDate(e.estimatedArrivalTime)}</td>
+        </tr>`).join('');
+
+    return {
+        subject: `Your ${sessionName} schedule for ${date} - ${totalPatients} patients`,
+        html: wrapEmail({
+            title: `${sessionName}: ${totalPatients} patients booked`,
+            bodyHtml: `
+                <p>Hello ${doctorName || 'Doctor'}, booking has closed and the queue for this session is final.</p>
+                ${infoRow('Facility', facilityName)}
+                ${infoRow('Date', date)}
+                ${infoRow('Session', `${fmtDate(startsAt)} to ${fmtDate(endsAt)}`)}
+                ${infoRow('Total patients', totalPatients)}
+                <table style="width:100%; border-collapse:collapse; margin-top:14px; font-size:13px;">
+                  <thead>
+                    <tr style="background:#f3f4f6;">
+                      <th align="left" style="padding:8px 10px;">#</th>
+                      <th align="left" style="padding:8px 10px;">Patient</th>
+                      <th align="left" style="padding:8px 10px;">Expected</th>
+                    </tr>
+                  </thead>
+                  <tbody>${rows}</tbody>
+                </table>
+                <p style="margin-top:14px; color:#6b7280;">
+                  Order is set by referral priority and then by booking time. Expected times are estimates.
+                </p>
+            `
+        })
+    };
+}
+
 export default {
+    queueFinalizedEmail,
+    doctorSessionScheduleEmail,
     accountCreatedEmail,
     appointmentBookedPatientEmail,
     appointmentBookedDoctorEmail,

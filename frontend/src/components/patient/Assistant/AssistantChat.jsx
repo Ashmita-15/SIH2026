@@ -13,6 +13,7 @@ import Button from '../../ui/Button'
 import { useToast } from '../../ui/Toast'
 import StarterCards from './StarterCards'
 import MessageBubble from './MessageBubble'
+import TriageCard from './TriageCard'
 import Composer from './Composer'
 import MicButton from './MicButton'
 import VoiceModeBar from './VoiceModeBar'
@@ -20,8 +21,8 @@ import { useVoiceMode, VOICE } from './useVoiceMode'
 import { speak, stopSpeaking, primeVoices, canSpeak } from '../../../lib/voice'
 import {
   BOOKING, emptyDraft, fingerprintOf, isComplete, isAffirm, isCancel,
-  fetchDoctors, fetchAvailability, resolveDoctor, resolveDate, resolveSlot,
-  listSlots, submitBooking
+  fetchDoctors, fetchOfferings, resolveDoctor, resolveDate, resolveSlot, resolveSession,
+  listSlots, listSessions, submitBooking
 } from '../../../lib/bookingFlow'
 import { slotLabel } from '../../../lib/slots'
 
@@ -79,7 +80,7 @@ export default function AssistantChat({ compact = false, voiceStartSignal = 0, v
     confirmedFp: null,
     dateWord: null,
     doctors: [],
-    slots: []
+    offer: null
   })
   const bookingRef = useRef(booking)
   const setBookingState = useCallback((next) => {
@@ -180,7 +181,7 @@ export default function AssistantChat({ compact = false, voiceStartSignal = 0, v
   }, [readAloud])
 
   const resetBooking = useCallback(() => setBookingState(b => ({
-    status: BOOKING.IDLE, draft: emptyDraft(), confirmedFp: null, dateWord: null, doctors: b.doctors, slots: []
+    status: BOOKING.IDLE, draft: emptyDraft(), confirmedFp: null, dateWord: null, doctors: b.doctors, offer: null
   })), [setBookingState])
 
   /**
@@ -198,7 +199,7 @@ export default function AssistantChat({ compact = false, voiceStartSignal = 0, v
     const b = bookingRef.current
     const lang = i18n.language
     const draft = { ...b.draft }
-    let { doctors, slots, dateWord } = b
+    let { doctors, offer, dateWord } = b
     const say = (text, next) => { setBookingState({ ...b, ...next, draft }); finishReply(replyId, text, viaVoice) }
 
     // ── doctor ──────────────────────────────────────────────────────────
@@ -206,14 +207,14 @@ export default function AssistantChat({ compact = false, voiceStartSignal = 0, v
       if (!doctors.length) { try { doctors = await fetchDoctors() } catch { doctors = [] } }
       const { doctor, candidates } = resolveDoctor(hints.doctorHint, doctors)
       if (doctor) {
-        if (doctor._id !== draft.doctorId) { draft.timeSlot = null; slots = [] }
+        if (doctor._id !== draft.doctorId) { draft.timeSlot = null; draft.sessionId = null; offer = null }
         draft.doctorId = doctor._id
         draft.doctorName = doctor.name
       } else if (!draft.doctorId) {
         const list = (candidates.length ? candidates : doctors).map(d => d.name).join(', ')
         return say(
           t(candidates.length ? 'booking.doctorAmbiguous' : 'booking.doctorUnknown', { list }),
-          { doctors, confirmedFp: null, status: BOOKING.COLLECTING_DOCTOR }
+          { doctors, offer: null, confirmedFp: null, status: BOOKING.COLLECTING_DOCTOR }
         )
       }
     }
@@ -225,56 +226,98 @@ export default function AssistantChat({ compact = false, voiceStartSignal = 0, v
         draft.requestedDate = iso
         dateWord = hints.dateHint
         draft.timeSlot = null // a free hour on one day says nothing about another
-        slots = []
+        offer = null
       }
     }
     if (!draft.requestedDate) {
       return say(
         t(draft.doctorName ? 'booking.askDate' : 'booking.dateUnknown', { doctor: draft.doctorName }),
-        { doctors, slots: [], confirmedFp: null, status: BOOKING.COLLECTING_DATE }
+        { doctors, offer: null, confirmedFp: null, status: BOOKING.COLLECTING_DATE }
       )
     }
 
-    // ── real availability ───────────────────────────────────────────────
-    if (!slots.length) {
-      try { slots = await fetchAvailability(draft.doctorId, draft.requestedDate) } catch { slots = [] }
+    /**
+     * What the doctor is offering — sessions if they run them, hours if not.
+     *
+     * Read from the same endpoint the manual booking form uses, so the voice
+     * path can never offer something the screen would refuse.
+     */
+    if (!offer) {
+      try { offer = await fetchOfferings(draft.doctorId, draft.requestedDate) }
+      catch { offer = { mode: 'slot', sessions: [], slots: [] } }
     }
+    const sessionMode = offer.mode === 'session'
+    const options = sessionMode ? offer.sessions : offer.slots
     const dateLabel = dateWord ? t(`booking.${dateWord}`) : draft.requestedDate
-    if (!slots.length) {
+
+    if (!options.length) {
       draft.requestedDate = null
       return say(
-        t('booking.noSlots', { doctor: draft.doctorName, date: dateLabel }),
-        { doctors, slots: [], dateWord: null, confirmedFp: null, status: BOOKING.COLLECTING_DATE }
+        t(sessionMode ? 'booking.noSessions' : 'booking.noSlots', { doctor: draft.doctorName, date: dateLabel }),
+        { doctors, offer: null, dateWord: null, confirmedFp: null, status: BOOKING.COLLECTING_DATE }
       )
     }
 
-    // ── hour ────────────────────────────────────────────────────────────
-    if (hints.hourHint) {
-      const slot = resolveSlot(hints.hourHint, slots)
-      if (!slot) {
-        draft.timeSlot = null
+    // ── session, or hour ────────────────────────────────────────────────
+    if (sessionMode) {
+      if (!draft.sessionId && (hints.bandHint || hints.hourHint || hints.sessionText)) {
+        const picked = resolveSession(
+          { bandHint: hints.bandHint, hourHint: hints.hourHint, text: hints.sessionText },
+          offer.sessions
+        )
+        if (picked) {
+          draft.sessionId = picked.sessionId
+          draft.sessionName = picked.name
+          draft.sessionLabel = listSessions([picked], lang)
+          draft.timeSlot = null
+        } else {
+          return say(
+            t('booking.sessionUnknown', { sessions: listSessions(offer.sessions, lang) }),
+            { doctors, offer, dateWord, confirmedFp: null, status: BOOKING.COLLECTING_SLOT }
+          )
+        }
+      }
+      if (!draft.sessionId) {
         return say(
-          t('booking.slotUnknown', { slots: listSlots(slots, lang) }),
-          { doctors, slots, dateWord, confirmedFp: null, status: BOOKING.COLLECTING_SLOT }
+          t('booking.askSession', { date: dateLabel, sessions: listSessions(offer.sessions, lang) }),
+          { doctors, offer, dateWord, confirmedFp: null, status: BOOKING.COLLECTING_SLOT }
         )
       }
-      draft.timeSlot = slot
-    }
-    if (!draft.timeSlot) {
-      return say(
-        t('booking.askSlot', { date: dateLabel, slots: listSlots(slots, lang) }),
-        { doctors, slots, dateWord, confirmedFp: null, status: BOOKING.COLLECTING_SLOT }
-      )
+    } else {
+      if (hints.hourHint) {
+        const slot = resolveSlot(hints.hourHint, offer.slots)
+        if (!slot) {
+          draft.timeSlot = null
+          return say(
+            t('booking.slotUnknown', { slots: listSlots(offer.slots, lang) }),
+            { doctors, offer, dateWord, confirmedFp: null, status: BOOKING.COLLECTING_SLOT }
+          )
+        }
+        draft.timeSlot = slot
+      }
+      if (!draft.timeSlot) {
+        return say(
+          t('booking.askSlot', { date: dateLabel, slots: listSlots(offer.slots, lang) }),
+          { doctors, offer, dateWord, confirmedFp: null, status: BOOKING.COLLECTING_SLOT }
+        )
+      }
     }
 
     // ── read it back and wait to be told yes ────────────────────────────
     const fp = fingerprintOf(draft)
-    const shown = { doctor: draft.doctorName, date: dateLabel, slot: slotLabel(draft.timeSlot, lang), symptoms: draft.symptoms }
+    const shown = {
+      doctor: draft.doctorName, date: dateLabel,
+      slot: sessionMode ? draft.sessionLabel : slotLabel(draft.timeSlot, lang),
+      symptoms: draft.symptoms
+    }
     say(
       t(draft.symptoms ? 'booking.summary' : 'booking.summaryNoSymptoms', shown),
-      { doctors, slots, dateWord, confirmedFp: fp, status: BOOKING.AWAITING_CONFIRMATION }
+      { doctors, offer, dateWord, confirmedFp: fp, status: BOOKING.AWAITING_CONFIRMATION }
     )
-  }, [i18n.language, t, finishReply, setBookingState])
+    // Said plainly here, because the number is what a patient expects next and
+    // its absence would otherwise look like the booking half-failed.
+    if (sessionMode) pushAssistant(t('booking.queueLater'), viaVoice)
+  }, [i18n.language, t, finishReply, setBookingState, pushAssistant])
 
   /**
    * The only write in this file, and only from here.
@@ -298,8 +341,11 @@ export default function AssistantChat({ compact = false, voiceStartSignal = 0, v
 
     try {
       await submitBooking(draft)
-      setBookingState({ status: BOOKING.BOOKED, draft: emptyDraft(), confirmedFp: null, dateWord: null, doctors: b.doctors, slots: [] })
-      pushAssistant(t('booking.booked', { doctor: draft.doctorName, date: dateLabel, slot: slotLabel(draft.timeSlot, lang) }), viaVoice)
+      setBookingState({ status: BOOKING.BOOKED, draft: emptyDraft(), confirmedFp: null, dateWord: null, doctors: b.doctors, offer: null })
+      pushAssistant(t(draft.sessionId ? 'booking.bookedSession' : 'booking.booked', {
+        doctor: draft.doctorName, date: dateLabel,
+        slot: draft.sessionId ? draft.sessionLabel : slotLabel(draft.timeSlot, lang)
+      }), viaVoice)
       window.dispatchEvent(new CustomEvent('appointments:changed'))
     } catch (err) {
       const code = err?.response?.status
@@ -310,7 +356,7 @@ export default function AssistantChat({ compact = false, voiceStartSignal = 0, v
          * fetched again and the patient chooses from what is actually left.
          */
         let fresh = []
-        try { fresh = await fetchAvailability(draft.doctorId, draft.requestedDate) } catch { fresh = [] }
+        try { fresh = await fetchOfferings(draft.doctorId, draft.requestedDate) } catch { fresh = { mode: 'slot', sessions: [], slots: [] } }
         const next = { ...draft, timeSlot: null }
         if (!fresh.length) next.requestedDate = null
         setBookingState({
@@ -385,6 +431,11 @@ export default function AssistantChat({ compact = false, voiceStartSignal = 0, v
       onEvent: (event) => {
         if (event.type === 'delta') patch(m => ({ ...m, text: m.text + event.text }))
         else if (event.type === 'booking_hints') hints = event.hints
+        /**
+         * Decision support, attached to the reply it belongs to. The card is
+         * not rendered when a red flag fired — the escalation is the answer.
+         */
+        else if (event.type === 'triage') patch(m => ({ ...m, triage: event }))
         else if (event.type === 'redflag') {
           patch(m => ({ ...m, urgent: true }))
           /**
@@ -481,7 +532,9 @@ export default function AssistantChat({ compact = false, voiceStartSignal = 0, v
 
     // The booking step runs after the stream because it may need a round trip
     // of its own for real availability.
-    if (hints) await applyHints(hints, replyId, viaVoice)
+    // The patient's own words travel with the hints so a session can be chosen
+    // by the name the doctor gave it, not only by a time band.
+    if (hints) await applyHints({ ...hints, sessionText: latest?.text || '' }, replyId, viaVoice)
 
     // Aborting resolves normally, so a stopped stream keeps whatever text
     // arrived and simply stops being "streaming".
@@ -730,8 +783,8 @@ export default function AssistantChat({ compact = false, voiceStartSignal = 0, v
         ) : (
           <ul className="flex flex-col gap-4 pb-2">
             {messages.map((m, i) => (
+              <React.Fragment key={m.id}>
               <MessageBubble
-                key={m.id}
                 message={m}
                 onRetry={retry}
                 isLast={i === messages.length - 1}
@@ -739,6 +792,8 @@ export default function AssistantChat({ compact = false, voiceStartSignal = 0, v
                 speaking={speakingId === m.id}
                 onToggleSpeech={() => toggleSpeech(m)}
               />
+              {m.triage && !m.urgent && <TriageCard triage={m.triage} />}
+              </React.Fragment>
             ))}
           </ul>
         )}

@@ -5,6 +5,8 @@ import { createSpokenSplitter, stripMarkers } from '../assistant/spokenSplit.js'
 import { extractFollowUps, hideTrailingMarker } from '../assistant/followUps.js';
 import { transcribeAudio } from '../assistant/transcribe.js';
 import { deriveGuidance, extractBookingHints } from '../assistant/conversationGuidance.js';
+import { triage } from '../assistant/triage.js';
+import User from '../models/User.js';
 import { retrieveContext } from '../rag/retrieve.js';
 import { offlinePack } from '../assistant/offlineFallback.js';
 
@@ -131,6 +133,23 @@ export const chat = async (req, res) => {
      * describing chest pain must not be moved to a different screen, and the
      * escalation stays the only thing that acted on that turn.
      */
+    /**
+     * Triage runs alongside retrieval, and never when a red flag has fired.
+     *
+     * The escalation is already the answer in that case; grading somebody who
+     * has just been told to call an ambulance would only muddy it. Age comes
+     * from the patient's own record, not from anything they typed.
+     */
+    const triaging = urgent ? Promise.resolve(null) : (async () => {
+        const me = await User.findById(req.user?.id).select('age').lean().catch(() => null);
+        return triage({
+            text: latest?.text,
+            age: Number.isFinite(Number(me?.age)) ? Number(me.age) : null,
+            hasFiles: Boolean(latest?.files?.length),
+            signal: controller.signal
+        }).catch(() => null);
+    })();
+
     const [{ text: retrieved, citations }, guidance] = await Promise.all([
         retrieveContext({
             query: latest?.text || '',
@@ -147,6 +166,21 @@ export const chat = async (req, res) => {
     ]);
 
     if (citations.length) send(res, { type: 'citations', items: citations });
+
+    /**
+     * Decision support, sent as its own event so the client renders it beside
+     * the answer rather than inside it. It recommends; it books nothing.
+     */
+    const triageOutcome = await triaging;
+    if (triageOutcome) {
+        send(res, {
+            type: 'triage',
+            level: triageOutcome.level,
+            symptoms: triageOutcome.symptoms,
+            reasons: triageOutcome.reasons,
+            referralPriority: triageOutcome.referralPriority
+        });
+    }
 
     /**
      * A guided turn answers with one of conversationGuidance's fixed

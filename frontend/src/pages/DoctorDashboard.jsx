@@ -1,3 +1,6 @@
+import SessionSchedule from '../components/doctor/SessionSchedule'
+import SessionQueueView from '../components/doctor/SessionQueueView'
+import DiagnosticQueue from '../components/doctor/DiagnosticQueue'
 import React, { lazy, Suspense } from 'react'
 import { Routes, Route, Navigate, useNavigate, useParams } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
@@ -17,6 +20,9 @@ export default function DoctorDashboard() {
 
   return (
     <Routes>
+      <Route path="sessions" element={<SessionSchedule />} />
+      <Route path="queue" element={<SessionQueueView />} />
+      <Route path="diagnostics" element={<DiagnosticQueue />} />
       <Route index element={<TodayRoute onJoinRoom={joinRoom} />} />
       <Route path="requests" element={<RequestsRoute onJoinRoom={joinRoom} />} />
       <Route path="appointments" element={<ScheduleRoute onJoinRoom={joinRoom} />} />

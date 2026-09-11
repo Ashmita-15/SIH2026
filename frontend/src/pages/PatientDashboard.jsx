@@ -1,3 +1,4 @@
+import MyDiagnostics from '../components/patient/MyDiagnostics'
 import React, { lazy, Suspense } from 'react'
 import { Routes, Route, Navigate, useNavigate, useParams, useLocation } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
@@ -35,6 +36,7 @@ export default function PatientDashboard() {
       <Route path="care/book" element={<BookRoute />} />
       <Route path="care/call/:appointmentId" element={<CallRoute />} />
 
+      <Route path="diagnostics" element={<DiagnosticsRoute />} />
       <Route path="records" element={<RecordsRoute />} />
       <Route path="timeline" element={<TimelineRoute />} />
 
@@ -167,5 +169,14 @@ function CallRoute() {
         <VideoCall roomId={appointmentId} perspective="patient" onLeave={() => navigate('/patient/care')} />
       </Suspense>
     </div>
+  )
+}
+
+function DiagnosticsRoute() {
+  const { t } = useTranslation()
+  return (
+    <Page title={t('diagnostics.title')} description={t('diagnostics.subtitle')}>
+      <MyDiagnostics />
+    </Page>
   )
 }

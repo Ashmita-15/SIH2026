@@ -14,6 +14,9 @@ import facilityRoutes from './routes/facilityRoutes.js';
 import healthRecordRoutes from './routes/healthRecordRoutes.js';
 import healthWorkerRoutes from './routes/healthWorkerRoutes.js';
 import hospitalRoutes from './routes/hospitalRoutes.js';
+import sessionRoutes from './routes/sessionRoutes.js';
+import diagnosticRoutes from './routes/diagnosticRoutes.js';
+import { startSessionScheduler } from './services/sessionScheduler.js';
 import { timelineRouter, facilityRouter, medicineRouter } from './routes/insightsRoutes.js';
 import pharmacyRoutes from './routes/pharmacyRoutes.js';
 import recommendationRoutes from './routes/recommendationRoutes.js';
@@ -70,6 +73,8 @@ app.use('/api/facilities', facilityRoutes);
 app.use('/api/records', healthRecordRoutes);
 app.use('/api/health-worker', healthWorkerRoutes);
 app.use('/api/hospital', hospitalRoutes);
+app.use('/api/sessions', sessionRoutes);
+app.use('/api/diagnostics', diagnosticRoutes);
 app.use('/api/patients', timelineRouter);
 app.use('/api/facility', facilityRouter);
 app.use('/api/medicines', medicineRouter);
@@ -139,6 +144,8 @@ const PORT = process.env.PORT || 5001;
 
 server.listen(PORT, '0.0.0.0', () => {
     console.log(`Backend running on port ${PORT}`);
+    // Booking cutoffs finalise themselves; nobody presses a button.
+    startSessionScheduler();
 });
 
 

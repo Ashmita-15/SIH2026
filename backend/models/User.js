@@ -1,5 +1,23 @@
 import mongoose from 'mongoose';
 
+/**
+ * A doctor's consulting session — "Afternoon OPD, Mon–Fri, 2–5, 20 patients".
+ *
+ * Additive: `availability` above is free text a doctor typed about themselves
+ * and is still shown as-is. This is the machine-readable version, and only
+ * doctors who have configured one get session booking; everyone else keeps the
+ * hourly slots exactly as before.
+ */
+const doctorSessionSchema = new mongoose.Schema({
+    name: { type: String, required: true, trim: true },
+    /** 0 = Sunday, matching Date#getUTCDay. */
+    days: [{ type: Number, min: 0, max: 6 }],
+    startTime: { type: String, required: true },   // "14:00"
+    endTime: { type: String, required: true },     // "17:00"
+    maxPatients: { type: Number, required: true, min: 1, max: 200 },
+    active: { type: Boolean, default: true }
+}, { _id: true });
+
 const userSchema = new mongoose.Schema({
     name: { type: String, required: true },
     email: { type: String, required: true, unique: true },
@@ -19,6 +37,8 @@ const userSchema = new mongoose.Schema({
     specialization: { type: String },
     qualification: { type: String },
     availability: { type: String },
+    /** Configured consulting sessions. Empty for every non-doctor account. */
+    sessions: { type: [doctorSessionSchema], default: [] },
     profilePicture: { type: String, default: '' },
     bio: { type: String, default: '' },
     phone: { type: String },

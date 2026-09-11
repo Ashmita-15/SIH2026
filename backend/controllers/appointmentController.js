@@ -2,6 +2,7 @@ import Appointment from '../models/Appointment.js';
 import { SLOTS, isValidSlot } from '../config/slots.js';
 import User from '../models/User.js';
 import { buildQueue, findAlternatives } from '../services/queueService.js';
+import { sessionsForDate, nextFreeSeat, SESSION_STATUS } from '../services/sessionService.js';
 import {
     notifyAppointmentBooked,
     notifyAppointmentConfirmed,
@@ -41,7 +42,7 @@ const ASSISTED_POPULATE = [
 
 export const bookAppointment = async (req, res) => {
     try {
-        const { doctorId, requestedDate, symptoms, consultationType, timeSlot } = req.body;
+        const { doctorId, requestedDate, symptoms, consultationType, timeSlot, sessionId } = req.body;
 
         /**
          * Who this appointment is for is decided by the token, never by the
@@ -92,7 +93,7 @@ export const bookAppointment = async (req, res) => {
          * setUTCHours, not setHours: this server runs at +05:30, where the
          * local-time version would move the booking to the previous day.
          */
-        if (timeSlot) when.setUTCHours(0, 0, 0, 0);
+        if (timeSlot || sessionId) when.setUTCHours(0, 0, 0, 0);
         
         // Process uploaded attachments if any
         const attachments = [];
@@ -136,12 +137,48 @@ export const bookAppointment = async (req, res) => {
         if (timeSlot) appointmentData.timeSlot = timeSlot;
 
         /**
+         * Session booking.
+         *
+         * A session is booked instead of an hour, and no queue position is
+         * assigned here — that happens once, at the cutoff, for everybody at
+         * the same time. What this does assign is a seat number, which exists
+         * only so the unique index has something to refuse when a session is
+         * full; it is never shown and has nothing to do with the eventual
+         * order.
+         */
+        if (sessionId) {
+            const view = await sessionsForDate({ doctorId, date: when.toISOString().slice(0, 10) });
+            if (!view) return res.status(404).json({ message: 'Doctor not found' });
+
+            const session = view.sessions.find(s => s.sessionId === String(sessionId));
+            if (!session) return res.status(400).json({ message: 'That session is not running on this date' });
+
+            if (session.status === SESSION_STATUS.CUTOFF || session.status === SESSION_STATUS.FINALIZED) {
+                return res.status(409).json({ message: 'Booking for this session has closed. Please choose another session.' });
+            }
+            if (session.status === SESSION_STATUS.FULL) {
+                return res.status(409).json({ message: 'This session is full. Please choose another session.' });
+            }
+
+            const seat = nextFreeSeat(session.takenSeats, session.maxPatients);
+            if (seat === null) {
+                return res.status(409).json({ message: 'This session is full. Please choose another session.' });
+            }
+
+            appointmentData.sessionId = session.sessionId;
+            appointmentData.sessionName = session.name;
+            appointmentData.seatNo = seat;
+            // A session booking is a day plus a session, never an hour.
+            delete appointmentData.timeSlot;
+        }
+
+        /**
          * Asked first so the answer is a sentence rather than a driver error.
          * This is courtesy, not the guarantee — two requests can both read
          * "free" here before either writes, which is what the unique index on
          * the model is for.
          */
-        if (timeSlot) {
+        if (timeSlot && !sessionId) {
             const clash = await Appointment.exists({
                 doctorId,
                 requestedDate: when,
@@ -176,7 +213,12 @@ export const bookAppointment = async (req, res) => {
          * gets the same answer it would have got a millisecond earlier.
          */
         if (e?.code === 11000) {
-            return res.status(409).json({ message: 'That time slot is no longer available. Please choose another time.' });
+            const onSession = String(e?.message || '').includes('session_seat_unique');
+            return res.status(409).json({
+                message: onSession
+                    ? 'This session just filled up. Please choose another session.'
+                    : 'That time slot is no longer available. Please choose another time.'
+            });
         }
         res.status(500).json({ message: e.message });
     }

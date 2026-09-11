@@ -154,6 +154,23 @@ export async function getTimeline(patientId, ctx) {
     }));
 
     for (const e of encounters) {
+        /**
+         * A completed test writes an ordinary health record, so it arrives
+         * here with everything else and needs only its own label — no second
+         * query, and no branch that could disagree with the record itself.
+         */
+        if (e.type === 'lab_result') {
+            events.push(event('lab_result', e.occurredAt || e.createdAt, 'Test result', {
+                sourceId: e._id,
+                summary: {
+                    facility: e.facilityId?.name || null,
+                    author: e.authorId?.name || null,
+                    notes: e.notes || null
+                }
+            }));
+            continue;
+        }
+
         // A visit with a diagnosis is a consultation write-up; one with vitals
         // and no diagnosis is a frontline observation. They read differently
         // and should not be flattened into one kind of entry.

@@ -11,6 +11,23 @@ const appointmentSchema = new mongoose.Schema({
         enum: ['pending', 'confirmed', 'rejected', 'completed', 'cancelled'], 
         default: 'pending' 
     },
+    /**
+     * Session booking. A patient books a session, not an hour, and the queue
+     * position below is filled in once at the cutoff — never at booking time,
+     * so nobody's place depends on how fast they tapped.
+     *
+     * All optional: appointments booked against the hourly slot grid, and
+     * every appointment that already exists, carry none of this and still read
+     * and render exactly as before.
+     */
+    sessionId: { type: mongoose.Schema.Types.ObjectId, default: null },
+    sessionName: { type: String, default: null },
+    queuePosition: { type: Number, default: null },
+    estimatedArrivalTime: { type: Date, default: null },
+    queueFinalizedAt: { type: Date, default: null },
+    /** 1..maxPatients. Only a capacity guard — it is NOT the queue position. */
+    seatNo: { type: Number, default: null },
+
     symptoms: { type: String }, // Patient's symptoms/reason for visit
     consultationType: { type: String, enum: ['video', 'chat'], default: 'video' },
 
@@ -41,6 +58,28 @@ const appointmentSchema = new mongoose.Schema({
         uploadedAt: { type: Date, default: Date.now }
     }]
 }, { timestamps: true });
+
+/**
+ * Session capacity, enforced by the database rather than by a count-then-insert.
+ *
+ * A session holds N patients and the check for "is it full?" cannot be made
+ * safe in application code — two requests can both read N-1 before either
+ * writes. Giving every booking a distinct (session, day, seat) key means the
+ * database refuses the surplus, exactly as the slot index already does for the
+ * hourly grid.
+ */
+appointmentSchema.index(
+    { doctorId: 1, sessionId: 1, requestedDate: 1, seatNo: 1 },
+    {
+        name: 'session_seat_unique',
+        unique: true,
+        partialFilterExpression: {
+            status: { $in: ['pending', 'confirmed'] },
+            sessionId: { $type: 'objectId' },
+            seatNo: { $type: 'number' }
+        }
+    }
+);
 
 /**
  * One doctor, one hour, one patient.

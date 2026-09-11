@@ -35,10 +35,15 @@ const healthRecordSchema = new mongoose.Schema({
     /** Where and how this contact happened. */
     type: {
         type: String,
-        enum: ['home_visit', 'sub_centre', 'phc_opd', 'teleconsult', 'hospital', 'follow_up'],
+        enum: ['home_visit', 'sub_centre', 'phc_opd', 'teleconsult', 'hospital', 'follow_up', 'lab_result'],
         default: 'teleconsult'
     },
     facilityId: { type: mongoose.Schema.Types.ObjectId, ref: 'Hospital' },
+    /**
+     * Set only on a lab_result. Links the record back to the order it answers,
+     * and makes writing a result twice detectable.
+     */
+    diagnosticRequestId: { type: mongoose.Schema.Types.ObjectId, ref: 'DiagnosticRequest', default: null },
     /** Who recorded it. A record with no attributable author is not a record. */
     authorId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
     authorRole: { type: String, enum: ['doctor', 'health_worker', 'hospital'] },

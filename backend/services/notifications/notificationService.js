@@ -166,7 +166,32 @@ export async function notifyReferralStatusChanged({ referral, patient, toFacilit
     return sendMail({ to: patient.email, subject, html });
 }
 
+/**
+ * A patient's final place in a session queue. Sent once, by the scheduler,
+ * after booking closes — never at booking time, when no position exists yet.
+ */
+export async function notifyQueueFinalized({ patient, doctorName, facilityName, date, sessionName, startsAt, position, estimatedArrivalTime, totalPatients }) {
+    if (!patient?.email) return { sent: false, reason: 'no_recipient' };
+    const mail = templates.queueFinalizedEmail({
+        patientName: patient.name, doctorName, facilityName, date, sessionName,
+        position, estimatedArrivalTime, totalPatients
+    });
+    return sendMail({ to: patient.email, ...mail });
+}
+
+/** The doctor's own list for a finalised session. */
+export async function notifyDoctorSessionSchedule({ doctor, facilityName, date, sessionName, startsAt, endsAt, totalPatients, entries }) {
+    if (!doctor?.email) return { sent: false, reason: 'no_recipient' };
+    const mail = templates.doctorSessionScheduleEmail({
+        doctorName: doctor.name, facilityName, date, sessionName,
+        startsAt, endsAt, totalPatients, entries
+    });
+    return sendMail({ to: doctor.email, ...mail });
+}
+
 export default {
+    notifyQueueFinalized,
+    notifyDoctorSessionSchedule,
     notifyAccountCreated,
     notifyAppointmentBooked,
     notifyAppointmentConfirmed,

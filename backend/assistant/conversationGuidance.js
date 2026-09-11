@@ -123,7 +123,7 @@ function summarise({ lang, symptoms, time }) {
 const BOOKING_INSTRUCTION = `You extract what a patient referred to while arranging a doctor's appointment.
 
 Return ONLY a JSON object, no code fence, exactly this shape:
-{"doctorHint": null, "dateHint": null, "hourHint": null}
+{"doctorHint": null, "dateHint": null, "hourHint": null, "bandHint": null}
 
 - doctorHint: a doctor's NAME the patient just referred to, written in LATIN letters.
   Doctor names are stored in Latin script, so romanise what the patient said:
@@ -131,7 +131,9 @@ Return ONLY a JSON object, no code fence, exactly this shape:
   never translate, correct or complete a name they did not say. null if they named nobody.
 - dateHint: "today", "tomorrow" or "day_after" — only if they clearly said one of those. Otherwise null.
 - hourHint: the clock hour they asked for, as a plain number 1 to 24. "5 बजे" -> 5. "shaam 5 baje" -> 5.
-  "four o'clock" -> 4. null if they named no time.
+  "four o'clock" -> 4. null if they named no hour.
+- bandHint: "morning", "afternoon" or "evening" if they named a part of the day rather than an hour.
+  "सुबह"/"subah" -> morning. "दोपहर"/"dopahar" -> afternoon. "शाम"/"shaam"/"ਸ਼ਾਮ" -> evening. Otherwise null.
 
 Rules:
 - People speak Hindi, Punjabi and English, often mixed and often in Latin letters. Judge meaning, not spelling.
@@ -144,7 +146,7 @@ const DATE_HINTS = ['today', 'tomorrow', 'day_after'];
 export async function extractBookingHints({ messages = [], lang = 'en', signal }) {
     const latest = [...messages].reverse().find(m => m.role !== 'assistant');
     const words = String(latest?.text || '').trim();
-    const empty = { doctorHint: null, dateHint: null, hourHint: null };
+    const empty = { doctorHint: null, dateHint: null, hourHint: null, bandHint: null };
     if (!words || words.length > MAX_COMMAND_CHARS) return empty;
 
     let parsed;
@@ -173,7 +175,9 @@ export async function extractBookingHints({ messages = [], lang = 'en', signal }
     const hour = Number(parsed.hourHint);
     const hourHint = Number.isInteger(hour) && hour >= 1 && hour <= 24 ? hour : null;
 
-    return { doctorHint, dateHint, hourHint };
+    const bandHint = ['morning', 'afternoon', 'evening'].includes(parsed.bandHint) ? parsed.bandHint : null;
+
+    return { doctorHint, dateHint, hourHint, bandHint };
 }
 
 /**

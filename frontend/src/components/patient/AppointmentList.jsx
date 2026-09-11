@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next'
 import api, { friendlyError } from '../../services/api'
 import { useToast } from '../ui/Toast'
 import AppointmentCard from '../AppointmentCard'
+import QueueStatus from './QueueStatus'
 import Button from '../ui/Button'
 import ConfirmDialog from '../ui/ConfirmDialog'
 import Card, { CardBody } from '../ui/Card'
@@ -31,6 +32,27 @@ export default function AppointmentList({ appointments, onChanged, emptyAction }
     }
   }
 
+  /**
+   * Only the soonest upcoming appointment gets a queue reading.
+   *
+   * The queue is per doctor per day, so a card under every appointment would
+   * mean one request each — and the one a patient is actually waiting on is
+   * the next one. The rest keep their normal card.
+   *
+   * "Soonest" has to mean soonest *ahead*: sorting by date alone put the
+   * reading under an appointment from two days ago, where every slot has
+   * already passed and the position means nothing.
+   */
+  // UTC, because every appointment date is pinned to UTC midnight. Comparing
+  // against local midnight made a same-day appointment look like yesterday's
+  // between 00:00 and 05:30 at +05:30, which silently hid the queue card.
+  const startOfToday = new Date(); startOfToday.setUTCHours(0, 0, 0, 0)
+  const whenOf = (a) => new Date(a.confirmedDate || a.requestedDate)
+  const active = appointments
+    .filter(a => ['pending', 'confirmed'].includes(a.status))
+    .sort((a, b) => whenOf(a) - whenOf(b))
+  const nextActive = active.find(a => whenOf(a) >= startOfToday) || null
+
   if (!appointments.length) {
     return (
       <Card><CardBody>
@@ -52,8 +74,8 @@ export default function AppointmentList({ appointments, onChanged, emptyAction }
     <>
       <div className="flex flex-col gap-4">
         {appointments.map(appointment => (
+          <React.Fragment key={appointment._id}>
           <AppointmentCard
-            key={appointment._id}
             appointment={appointment}
             perspective="patient"
             actions={
@@ -71,6 +93,8 @@ export default function AppointmentList({ appointments, onChanged, emptyAction }
               </>
             }
           />
+          {nextActive?._id === appointment._id && <QueueStatus appointment={appointment} />}
+          </React.Fragment>
         ))}
       </div>
 

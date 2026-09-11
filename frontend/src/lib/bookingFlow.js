@@ -19,6 +19,7 @@ export const BOOKING = {
   IDLE: 'idle',
   COLLECTING_DOCTOR: 'collecting_doctor',
   COLLECTING_DATE: 'collecting_date',
+  /** Session or hour, depending on what the doctor runs. */
   COLLECTING_SLOT: 'collecting_slot',
   AWAITING_CONFIRMATION: 'awaiting_confirmation',
   BOOKING: 'booking',
@@ -57,6 +58,9 @@ export const emptyDraft = () => ({
   doctorName: null,
   requestedDate: null,
   timeSlot: null,
+  sessionId: null,
+  sessionName: null,
+  sessionLabel: null,
   symptoms: '',
   consultationType: 'video' // the API's own default; never asked for
 })
@@ -75,11 +79,13 @@ export const fingerprintOf = (d) => !d ? '' : [
   d.doctorId || '',
   d.requestedDate || '',
   d.timeSlot || '',
+  d.sessionId || '',
   d.consultationType || '',
   strip(d.symptoms)
 ].join('|')
 
-export const isComplete = (d) => Boolean(d?.doctorId && d?.requestedDate && d?.timeSlot)
+/** Either a session or an hour is enough; a doctor never offers both at once. */
+export const isComplete = (d) => Boolean(d?.doctorId && d?.requestedDate && (d?.sessionId || d?.timeSlot))
 
 /** Real doctors, from the endpoint the doctors page already uses. */
 export async function fetchDoctors() {
@@ -92,6 +98,90 @@ export async function fetchAvailability(doctorId, date) {
   const { data } = await api.get(`/appointments/doctor/${doctorId}/availability`, { params: { date } })
   return (data?.slots || []).filter(s => s.available).map(s => s.slot)
 }
+
+/**
+ * What this doctor is actually offering on this date.
+ *
+ * Sessions win when the doctor runs them, because that is what the manual form
+ * shows too — the two paths must never disagree about what can be booked. A
+ * doctor with no sessions configured still gets the hourly grid, so nothing
+ * breaks while clinics adopt sessions.
+ *
+ * Only bookable sessions are returned: the backend has already applied
+ * capacity and the four-hour cutoff, and this does not second-guess it.
+ */
+export async function fetchOfferings(doctorId, date) {
+  try {
+    const { data } = await api.get(`/sessions/doctor/${doctorId}`, { params: { date } })
+    // `configured` answers "does this doctor run sessions?" independently of
+    // the date; `sessions` is only those running on it. Using the latter would
+    // silently fall back to hourly slots on a doctor's non-clinic days.
+    if (Number(data?.configured) > 0) {
+      return { mode: 'session', sessions: (data?.sessions || []).filter(s => s.bookable), slots: [] }
+    }
+  } catch {
+    /* fall through to the hourly grid */
+  }
+  return { mode: 'slot', sessions: [], slots: await fetchAvailability(doctorId, date).catch(() => []) }
+}
+
+/** Which part of the day a session starts in, from its real start time. */
+const bandOf = (session) => {
+  const h = Number(String(session.startTime || '').split(':')[0])
+  if (!Number.isFinite(h)) return null
+  return h < 12 ? 'morning' : h < 16 ? 'afternoon' : 'evening'
+}
+
+/**
+ * A session the patient referred to, matched only against real ones.
+ *
+ * Three ways in, all resolved here rather than by the model: the part of the
+ * day they named, an hour that falls inside a session, or the session's own
+ * name. Two matches is a question, not a guess — and a session that is full or
+ * past its cutoff was never in this list to begin with.
+ */
+export function resolveSession({ bandHint, hourHint, text }, sessions) {
+  if (!sessions?.length) return null
+
+  if (bandHint) {
+    const hits = sessions.filter(s => bandOf(s) === bandHint)
+    if (hits.length === 1) return hits[0]
+  }
+
+  if (Number.isInteger(hourHint)) {
+    for (const hour of [hourHint, hourHint < 12 ? hourHint + 12 : hourHint - 12]) {
+      const hits = sessions.filter(s => {
+        const from = Number(String(s.startTime).split(':')[0])
+        const to = Number(String(s.endTime).split(':')[0])
+        return hour >= from && hour < to
+      })
+      if (hits.length === 1) return hits[0]
+    }
+  }
+
+  const q = strip(text)
+  if (q) {
+    const named = sessions.filter(s => q.includes(strip(s.name)))
+    if (named.length === 1) return named[0]
+  }
+
+  return null
+}
+
+/**
+ * Sessions read aloud by name and clock, so the choice is sayable.
+ *
+ * Uses the doctor's own startTime/endTime rather than the derived instants:
+ * those are UTC, and converting them would read a 9 AM clinic out as 2:30 PM.
+ */
+const spokenClock = (hhmm) => {
+  const [h, m] = String(hhmm || '').split(':').map(Number)
+  if (!Number.isFinite(h)) return ''
+  const suffix = h < 12 ? 'AM' : 'PM'
+  return `${h % 12 === 0 ? 12 : h % 12}:${String(m || 0).padStart(2, '0')} ${suffix}`
+}
+export const listSessions = (sessions) =>
+  sessions.map(s => `${s.name} (${spokenClock(s.startTime)} – ${spokenClock(s.endTime)})`).join(', ')
 
 /**
  * A name the patient said, matched against doctors that exist.
@@ -162,7 +252,10 @@ export async function submitBooking(draft) {
   const form = new FormData()
   form.append('doctorId', draft.doctorId)
   form.append('requestedDate', draft.requestedDate)
-  form.append('timeSlot', draft.timeSlot)
+  // A session booking and an hourly one are the same request to the same
+  // endpoint; only which field is present differs.
+  if (draft.sessionId) form.append('sessionId', draft.sessionId)
+  else form.append('timeSlot', draft.timeSlot)
   form.append('symptoms', draft.symptoms || '')
   form.append('consultationType', draft.consultationType || 'video')
   const { data } = await api.post('/appointments/book', form)

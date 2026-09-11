@@ -33,7 +33,10 @@ const NAV = {
     { key: 'today',        to: '/doctor',              icon: ICONS.today,    labelKey: 'nav.doctor.today', end: true },
     { key: 'requests',     to: '/doctor/requests',     icon: ICONS.inbox,    labelKey: 'nav.doctor.requests', badge: 'pendingRequests' },
     { key: 'appointments', to: '/doctor/appointments', icon: ICONS.calendar, labelKey: 'nav.doctor.appointments' },
-    { key: 'patients',     to: '/doctor/patients',     icon: ICONS.patients, labelKey: 'nav.doctor.patients' }
+    { key: 'patients',     to: '/doctor/patients',     icon: ICONS.patients, labelKey: 'nav.doctor.patients' },
+    { key: 'sessions', to: '/doctor/sessions', icon: ICONS.today, labelKey: 'nav.doctor.sessions' },
+    { key: 'queue', to: '/doctor/queue', icon: ICONS.patients, labelKey: 'nav.doctor.queue' },
+    { key: 'diagnostics', to: '/doctor/diagnostics', icon: ICONS.records, labelKey: 'nav.doctor.diagnostics' }
   ],
   pharmacy: [
     { key: 'overview',  to: '/pharmacy',           icon: ICONS.home,   labelKey: 'nav.pharmacy.overview', end: true },
