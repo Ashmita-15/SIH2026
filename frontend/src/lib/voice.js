@@ -2,7 +2,8 @@
  * Voice input and output.
  *
  * Recording rather than the Web Speech API: SpeechRecognition is absent on
- * iOS Safari and unreliable for pa-IN, so it can never be the only path.
+ * iOS Safari and unreliable for Indian languages, so it can never be the
+ * only path.
  * The recorder works wherever MediaRecorder does, and the audio goes to the
  * same model that already reads prescriptions.
  */
@@ -152,10 +153,10 @@ export async function transcribe(blob, lang, signal) {
 
 /* ---------------------------------------------------------------- speech out */
 
-const BCP47 = { en: 'en-IN', hi: 'hi-IN', pa: 'pa-IN', mr: 'mr-IN', bn: 'bn-IN' }
+const BCP47 = { en: 'en-IN', hi: 'hi-IN', mr: 'mr-IN', bn: 'bn-IN' }
 
 /**
- * Device voices vary a lot: Hindi is common, Punjabi frequently missing
+ * Device voices vary a lot: Hindi is common, Marathi frequently missing
  * entirely. Callers use this to decide whether to offer read-aloud rather
  * than presenting a speaker button that does nothing.
  */

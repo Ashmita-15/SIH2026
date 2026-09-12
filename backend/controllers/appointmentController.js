@@ -1,5 +1,6 @@
-import Appointment from '../models/Appointment.js';
+import Appointment, { CONSULTATION_TYPES } from '../models/Appointment.js';
 import { SLOTS, isValidSlot } from '../config/slots.js';
+import { finalizeIfFull } from '../services/sessionScheduler.js';
 import User from '../models/User.js';
 import { buildQueue, findAlternatives } from '../services/queueService.js';
 import { sessionsForDate, nextFreeSeat, SESSION_STATUS } from '../services/sessionService.js';
@@ -72,10 +73,27 @@ export const bookAppointment = async (req, res) => {
             });
         }
 
-        // The patient now asks for a specific hour, not just a day. Optional,
-        // so older clients that only send a date still work.
-        if (timeSlot && !isValidSlot(timeSlot)) {
-            return res.status(400).json({ message: 'Unknown time slot' });
+        /**
+         * A session, or nothing.
+         *
+         * Hourly slots are gone. They let a patient book an hour a doctor had
+         * never said they were working, and there was no capacity anywhere in
+         * that path — so a clinic could be handed twelve arrivals for a
+         * three-hour morning. A session is something the doctor configured,
+         * with a size they chose, which is the only version of this that a
+         * queue can be built from.
+         *
+         * `timeSlot` is rejected rather than ignored: a client still sending
+         * one has a stale idea of how booking works, and silently dropping it
+         * would book a different appointment than the patient was shown.
+         */
+        if (timeSlot) {
+            return res.status(400).json({
+                message: 'Hourly slots are no longer available. Please choose one of the doctor\'s sessions.'
+            });
+        }
+        if (!sessionId) {
+            return res.status(400).json({ message: 'sessionId is required — choose one of the doctor\'s sessions.' });
         }
 
         const when = new Date(requestedDate);
@@ -84,16 +102,16 @@ export const bookAppointment = async (req, res) => {
         }
 
         /**
-         * A slot booking is a day plus an hour, so the day is pinned to UTC
-         * midnight — which is exactly what "YYYY-MM-DD" already parses to, and
-         * how every stored appointment is written. Without this, two requests
-         * for the same slot carrying different times of day would produce
-         * different index keys and both succeed.
+         * The day is pinned to UTC midnight — which is exactly what
+         * "YYYY-MM-DD" already parses to, and how every stored appointment is
+         * written. Without this, two requests for the same session carrying
+         * different times of day would produce different index keys and both
+         * succeed.
          *
          * setUTCHours, not setHours: this server runs at +05:30, where the
          * local-time version would move the booking to the previous day.
          */
-        if (timeSlot || sessionId) when.setUTCHours(0, 0, 0, 0);
+        when.setUTCHours(0, 0, 0, 0);
         
         // Process uploaded attachments if any
         const attachments = [];
@@ -120,6 +138,9 @@ export const bookAppointment = async (req, res) => {
         }
         
         console.log('Prepared attachments for DB:', attachments);
+
+        // Set once the session is resolved; bounds the seat-race retry below.
+        let sessionMax = 0;
         
         // Create appointment with pending status
         const appointmentData = {
@@ -127,14 +148,10 @@ export const bookAppointment = async (req, res) => {
             doctorId,
             requestedDate: when,
             symptoms: symptoms || '',
-            consultationType: consultationType || 'video',
+            consultationType: CONSULTATION_TYPES.includes(consultationType) ? consultationType : 'video',
             status: 'pending',
             attachments
         };
-
-        // The requested hour is the whole point of the patient picking a slot:
-        // without it stored, the doctor has nothing to accept in one tap.
-        if (timeSlot) appointmentData.timeSlot = timeSlot;
 
         /**
          * Session booking.
@@ -146,7 +163,7 @@ export const bookAppointment = async (req, res) => {
          * full; it is never shown and has nothing to do with the eventual
          * order.
          */
-        if (sessionId) {
+        {
             const view = await sessionsForDate({ doctorId, date: when.toISOString().slice(0, 10) });
             if (!view) return res.status(404).json({ message: 'Doctor not found' });
 
@@ -168,29 +185,57 @@ export const bookAppointment = async (req, res) => {
             appointmentData.sessionId = session.sessionId;
             appointmentData.sessionName = session.name;
             appointmentData.seatNo = seat;
-            // A session booking is a day plus a session, never an hour.
-            delete appointmentData.timeSlot;
+            sessionMax = session.maxPatients;
         }
 
         /**
-         * Asked first so the answer is a sentence rather than a driver error.
-         * This is courtesy, not the guarantee — two requests can both read
-         * "free" here before either writes, which is what the unique index on
-         * the model is for.
+         * Claim a seat, and if somebody else claimed that exact number in the
+         * meantime, take the next one.
+         *
+         * The read above tells every concurrent request the same lowest free
+         * seat, so four patients booking a five-seat session at the same instant
+         * all picked seat 1 and the unique index refused three of them — a
+         * spurious "session just filled up" with four places still open.
+         *
+         * The index stays the capacity guarantee. This only distinguishes the
+         * two things it refuses for: losing a race for one seat number, which
+         * is retryable, and a genuinely full session, which is not. Bounded by
+         * the session size, so a truly full session still ends in a 409 rather
+         * than spinning.
          */
-        if (timeSlot && !sessionId) {
-            const clash = await Appointment.exists({
-                doctorId,
-                requestedDate: when,
-                timeSlot,
-                status: { $in: ['pending', 'confirmed'] }
-            });
-            if (clash) {
-                return res.status(409).json({ message: 'That time slot is no longer available. Please choose another time.' });
+        let appointment;
+        for (let attempt = 0; ; attempt++) {
+            try {
+                appointment = await Appointment.create(appointmentData);
+                break;
+            } catch (e) {
+                const seatRace = e?.code === 11000 && String(e?.message || '').includes('session_seat_unique');
+                if (!seatRace || attempt >= sessionMax) throw e;
+
+                const fresh = await sessionsForDate({ doctorId, date: when.toISOString().slice(0, 10) });
+                const again = fresh?.sessions.find(s => s.sessionId === String(sessionId));
+                if (!again || !again.bookable) throw e;
+
+                const next = nextFreeSeat(again.takenSeats, again.maxPatients);
+                if (next === null) throw e;
+                appointmentData.seatNo = next;
             }
         }
 
-        const appointment = await Appointment.create(appointmentData);
+        /**
+         * The booking that fills a session freezes it, here and now.
+         *
+         * Fire-and-forget and after the response is decided: the patient's
+         * booking succeeded either way, and making them wait on a queue
+         * computation and five emails would be the wrong trade. The scheduler
+         * tick is still the backstop — this only removes the delay, it is not
+         * the only path.
+         */
+        finalizeIfFull({
+            doctorId,
+            sessionId: appointment.sessionId,
+            dateISO: when.toISOString().slice(0, 10)
+        }).catch(() => {});
         
         // Populate doctor and patient details for response
         const populatedAppointment = await Appointment.findById(appointment._id)
@@ -271,19 +316,27 @@ export const confirmAppointment = async (req, res) => {
             return res.status(400).json({ message: 'Unknown time slot' });
         }
 
-        // Check if the time slot is already booked for this doctor on this date
-        const existingAppointment = await Appointment.findOne({
-            _id: { $ne: id },
-            doctorId: req.user.id,
-            confirmedDate: new Date(confirmedDate),
-            timeSlot,
-            status: 'confirmed'
-        });
-        
-        if (existingAppointment) {
-            return res.status(400).json({ 
-                message: 'This time slot is already booked for the selected date.' 
+        /**
+         * Only meaningful for the legacy hourly appointments still in the
+         * database. Guarded on `timeSlot` because Mongoose strips undefined
+         * from a query: without this, accepting a session booking searched for
+         * "any confirmed appointment that day" and refused the second one as a
+         * double-booking, which is exactly what sessions exist to allow.
+         */
+        if (timeSlot) {
+            const existingAppointment = await Appointment.findOne({
+                _id: { $ne: id },
+                doctorId: req.user.id,
+                confirmedDate: new Date(confirmedDate),
+                timeSlot,
+                status: 'confirmed'
             });
+
+            if (existingAppointment) {
+                return res.status(400).json({
+                    message: 'This time slot is already booked for the selected date.'
+                });
+            }
         }
         
         const appointment = await Appointment.findByIdAndUpdate(
@@ -444,7 +497,19 @@ export const cancelAppointment = async (req, res) => {
  * Without this the patient picks a time blind and the doctor counter-proposes
  * another — two round trips, on connections where each one is expensive.
  */
-export const getDoctorAvailability = async (req, res) => {
+/**
+ * Retired. Booking is session-only.
+ *
+ * Left in place answering 410 rather than deleted: a client still asking for
+ * an hourly grid must be told the grid is gone, not handed an empty one it
+ * would render as "no times today".
+ */
+export const getDoctorAvailability = async (_req, res) => res.status(410).json({
+    message: 'Hourly slots have been retired. Use GET /api/sessions/doctor/:doctorId?date=YYYY-MM-DD.',
+    slots: []
+});
+
+export const getDoctorAvailabilityLegacy = async (req, res) => {
     try {
         const { doctorId } = req.params;
         const { date } = req.query;

@@ -3,6 +3,7 @@ import { Routes, Route, Navigate, useLocation, useParams, Link } from 'react-rou
 import { useTranslation } from 'react-i18next'
 import Navbar from './components/Navbar.jsx'
 import AppShell from './components/app/AppShell.jsx'
+import LanguageGate from './components/app/LanguageGate.jsx'
 import EmergencyButton from './components/EmergencyButton.jsx'
 import AssistantLauncher from './components/patient/Assistant/AssistantLauncher.jsx'
 import { useAuth } from './context/AuthContext.jsx'
@@ -140,6 +141,11 @@ export default function App() {
 
       <AssistantLauncher />
       <EmergencyButton />
+
+      {/* Last in the tree, first on the screen: it is fixed and covers
+          everything, so nothing behind it can be read or tapped until a
+          language has been chosen. */}
+      <LanguageGate />
     </>
   )
 }

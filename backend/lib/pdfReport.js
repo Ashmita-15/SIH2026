@@ -48,7 +48,7 @@ const PAGE = { margin: 48, width: 595.28, height: 841.89 };
 
 /**
  * The danda (U+0964) and double danda (U+0965) sit in the Devanagari block
- * but are shared punctuation — Punjabi uses them too. Testing the whole
+ * but are shared punctuation — other Indic scripts use them too. Testing the whole
  * block therefore matched Gurmukhi sentences, picked the Devanagari face for
  * them, and dropped every Gurmukhi glyph: the exact silent-loss bug this
  * module exists to prevent. Match Devanagari letters only.
@@ -101,7 +101,7 @@ function splitByScript(text, available) {
     const runs = [];
     for (const char of String(text)) {
         // Neutral characters — spaces, and the danda that ends a sentence in
-        // both Hindi and Punjabi — stay with the run in progress. Sending the
+        // more than one Indic script — stay with the run in progress. Sending the
         // danda to Latin drew it as an empty box at the end of every Indic
         // sentence, which is exactly how it looked before.
         const script = NEUTRAL.test(char) ? null : scriptOf(char, available);

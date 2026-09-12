@@ -70,7 +70,7 @@
       "description": "Video calls and pages are designed to work on 2G and patchy mobile data."
     },
     "languages": {
-      "title": "English, Hindi, Bengali, Marathi and Punjabi",
+      "title": "English, Hindi, Marathi and Bengali",
       "description": "Every screen, including AI health guidance, speaks your language."
     },
     "free": {
@@ -755,7 +755,8 @@
     "truncated": "This answer was cut short. Ask again for the rest, or talk to a doctor.",
     "sending": "Sending…",
     "notSent": "Not sent — tap to try again",
-    "savedAnswerBusy": "Saved answer — the assistant is busy"
+    "savedAnswerBusy": "Saved answer — the assistant is busy",
+    "voiceRetry": "Sorry, I did not catch that. Could you say it again?"
   },
   "checkout": {
     "prescriptionTitle": "Prescription needed",
@@ -881,7 +882,9 @@
       "fri": "Fri",
       "sat": "Sat",
       "sun": "Sun"
-    }
+    },
+    "onboardingTitle": "Patients cannot book you yet",
+    "onboardingBody": "Add at least one session below. Booking is session-only, so you will not appear in the patient list until you have one."
   },
   "sessionQueue": {
     "none": "No finalized sessions yet",
@@ -942,5 +945,10 @@
     },
     "book": "Book an appointment",
     "disclaimer": "This is guidance to help you decide when to be seen. It is not a diagnosis."
+  },
+  "language": {
+    "gateTitle": "Choose your language",
+    "gateHint": "You can change this at any time.",
+    "gateContinue": "Continue"
   }
 }

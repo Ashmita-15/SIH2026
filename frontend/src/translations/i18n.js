@@ -3,19 +3,34 @@ import { initReactI18next } from 'react-i18next';
 
 import translationEN from './en.json';
 import translationHI from './hi.json';
-import translationPA from './pa.json';
 import translationMR from './mr.json';
 import translationBN from './bn.json';
 
 export const LANGUAGES = [
   { code: 'en', label: 'English', native: 'English', short: 'ENG' },
   { code: 'hi', label: 'Hindi', native: 'हिन्दी', short: 'हिन्दी' },
-  { code: 'pa', label: 'Punjabi', native: 'ਪੰਜਾਬੀ', short: 'ਪੰਜਾਬੀ' },
   { code: 'mr', label: 'Marathi', native: 'मराठी', short: 'मराठी' },
   { code: 'bn', label: 'Bengali', native: 'বাংলা', short: 'বাংলা' }
 ];
 
+/**
+ * The three offered on first run.
+ *
+ * A shorter list than LANGUAGES on purpose: the gate blocks the whole app, and
+ * a wall of scripts is a worse first screen than three legible choices.
+ * Bengali stays supported and reachable from the switcher — the gate only
+ * decides what is offered on first run, it does not remove a language.
+ */
+export const GATE_CODES = ['en', 'hi', 'mr'];
+export const GATE_LANGUAGES = LANGUAGES.filter(l => GATE_CODES.includes(l.code));
+
 const STORAGE_KEY = 'gramsathi:lang';
+/**
+ * Separate from STORAGE_KEY, because "we guessed from the browser" and "the
+ * user told us" are different facts. Only the second one should stop the gate
+ * from appearing.
+ */
+const CHOSEN_KEY = 'gramsathi:lang:chosen';
 
 function detectLanguage() {
   const stored = localStorage.getItem(STORAGE_KEY);
@@ -24,7 +39,16 @@ function detectLanguage() {
   return LANGUAGES.some(l => l.code === browser) ? browser : 'en';
 }
 
-/** Screen readers need this to pronounce Devanagari, Gurmukhi, and Bengali correctly. */
+/** Private browsing and disabled storage both throw on access, not on write. */
+export function hasChosenLanguage() {
+  try { return localStorage.getItem(CHOSEN_KEY) === '1'; } catch { return false; }
+}
+
+export function markLanguageChosen() {
+  try { localStorage.setItem(CHOSEN_KEY, '1'); } catch { /* storage unavailable */ }
+}
+
+/** Screen readers need this to pronounce Devanagari and Bengali correctly. */
 function syncDocumentLang(lng) {
   document.documentElement.setAttribute('lang', lng);
 }
@@ -35,7 +59,6 @@ i18n
     resources: {
       en: { translation: translationEN },
       hi: { translation: translationHI },
-      pa: { translation: translationPA },
       mr: { translation: translationMR },
       bn: { translation: translationBN }
     },

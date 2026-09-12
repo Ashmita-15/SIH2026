@@ -1,5 +1,6 @@
 import api from '../services/api'
-import { toISODate, slotLabel } from './slots'
+import { toISODate } from './slots'
+import { matchDoctor, parseChoice } from './doctorMatch'
 
 /**
  * The deterministic half of voice booking.
@@ -37,21 +38,20 @@ export const BOOKING = {
 const AFFIRM = ['haan', 'han', 'ha', 'ji', 'ji haan', 'theek hai', 'thik hai', 'ok', 'okay', 'yes', 'yeah', 'yep', 'sure',
   'book it', 'book kar do', 'kar do', 'haan book kar do',
   'हाँ', 'हां', 'जी', 'जी हाँ', 'ठीक है', 'बिल्कुल', 'हाँ कर दीजिए', 'बुक कर दीजिए', 'बुक कर दो',
-  'ਹਾਂ', 'ਜੀ', 'ਠੀਕ ਹੈ', 'ਬਿਲਕੁਲ', 'ਬੁੱਕ ਕਰ ਦਿਓ',
   'हो', 'होय', 'नक्की', 'हो करा', 'बुक करा', 'करा', 'हो बुक करा',
   'হ্যাঁ', 'হ্যা', 'ঠিক আছে', 'অবশ্যই', 'বুক করুন', 'করুন', 'হ্যাঁ বুক করুন']
 
 const CANCEL = ['nahi', 'nahin', 'nai', 'rehne do', 'rahne do', 'nahi chahiye', 'cancel', 'stop', 'no', 'nope',
   'book mat karo', 'mat karo',
   'नहीं', 'नही', 'रहने दो', 'नहीं चाहिए', 'बंद करो', 'बुक मत करो', 'मत करो',
-  'ਨਹੀਂ', 'ਨਹੀ', 'ਰਹਿਣ ਦਿਓ', 'ਬੰਦ ਕਰੋ', 'ਬੁੱਕ ਨਾ ਕਰੋ',
   'नाही', 'नको', 'रद्द करा', 'थांबा', 'नको आहे', 'बंद करा', 'बुक करू नका',
   'না', 'নয়', 'বাতিল', 'থাক', 'দরকার নেই', 'বুক করবেন না', 'বন্ধ করুন']
 
 const strip = (s) => String(s || '').toLowerCase().replace(/[.!?,।]/g, ' ').replace(/\s+/g, ' ').trim()
 const shortMatch = (text, words) => {
   const t = strip(text)
-  return Boolean(t) && t.length <= 24 && words.includes(t)
+  if (!t || t.length > 30) return false
+  return words.some(w => t === w || t.startsWith(`${w} `) || t.endsWith(` ${w}`))
 }
 
 export const isAffirm = (text) => shortMatch(text, AFFIRM)
@@ -61,7 +61,6 @@ export const emptyDraft = () => ({
   doctorId: null,
   doctorName: null,
   requestedDate: null,
-  timeSlot: null,
   sessionId: null,
   sessionName: null,
   sessionLabel: null,
@@ -82,14 +81,13 @@ export const emptyDraft = () => ({
 export const fingerprintOf = (d) => !d ? '' : [
   d.doctorId || '',
   d.requestedDate || '',
-  d.timeSlot || '',
   d.sessionId || '',
   d.consultationType || '',
   strip(d.symptoms)
 ].join('|')
 
-/** Either a session or an hour is enough; a doctor never offers both at once. */
-export const isComplete = (d) => Boolean(d?.doctorId && d?.requestedDate && (d?.sessionId || d?.timeSlot))
+/** A doctor, a day and one of that doctor's sessions. Nothing else books. */
+export const isComplete = (d) => Boolean(d?.doctorId && d?.requestedDate && d?.sessionId)
 
 /** Real doctors, from the endpoint the doctors page already uses. */
 export async function fetchDoctors() {
@@ -97,36 +95,25 @@ export async function fetchDoctors() {
   return Object.values(data || {}).flat().filter(d => d?._id)
 }
 
-/** Real availability. The only source of a slot this file will ever accept. */
-export async function fetchAvailability(doctorId, date) {
-  const { data } = await api.get(`/appointments/doctor/${doctorId}/availability`, { params: { date } })
-  return (data?.slots || []).filter(s => s.available).map(s => s.slot)
-}
-
 /**
- * What this doctor is actually offering on this date.
+ * What this doctor is offering on this date.
  *
- * Sessions win when the doctor runs them, because that is what the manual form
- * shows too — the two paths must never disagree about what can be booked. A
- * doctor with no sessions configured still gets the hourly grid, so nothing
- * breaks while clinics adopt sessions.
+ * Sessions, or nothing. There is no hourly fallback any more: a failure or an
+ * empty day returns no sessions, and the conversation asks for a different day
+ * rather than quietly offering hours the doctor never agreed to work.
  *
- * Only bookable sessions are returned: the backend has already applied
+ * Only bookable sessions are returned — the backend has already applied
  * capacity and the four-hour cutoff, and this does not second-guess it.
  */
 export async function fetchOfferings(doctorId, date) {
   try {
     const { data } = await api.get(`/sessions/doctor/${doctorId}`, { params: { date } })
-    // `configured` answers "does this doctor run sessions?" independently of
-    // the date; `sessions` is only those running on it. Using the latter would
-    // silently fall back to hourly slots on a doctor's non-clinic days.
-    if (Number(data?.configured) > 0) {
-      return { mode: 'session', sessions: (data?.sessions || []).filter(s => s.bookable), slots: [] }
-    }
+    return { mode: 'session', sessions: (data?.sessions || []).filter(s => s.bookable) }
   } catch {
-    /* fall through to the hourly grid */
+    // An unreachable session list is "nothing bookable today", never "try an
+    // hour instead".
+    return { mode: 'session', sessions: [] }
   }
-  return { mode: 'slot', sessions: [], slots: await fetchAvailability(doctorId, date).catch(() => []) }
 }
 
 /** Which part of the day a session starts in, from its real start time. */
@@ -163,13 +150,77 @@ export function resolveSession({ bandHint, hourHint, text }, sessions) {
     }
   }
 
+  /**
+   * What the patient actually says, rather than the session's exact title.
+   *
+   * The old rule was `transcript.includes(session.name)`, which accepted
+   * "Morning OPD" and rejected every natural answer: "one", "the first one",
+   * "morning", "पहला", "सकाळी". Spoken answers are short, so this is the
+   * common case, not the edge case.
+   */
+  return resolveSessionChoice(text, sessions)
+}
+
+/**
+ * Which session a spoken answer means.
+ *
+ * Four ways in, tried strongest first, and all of them resolved against the
+ * sessions the availability API returned:
+ *
+ * 1. A position — "1", "one", "पहला", "दुसरा". Only while a list is on offer,
+ *    which is the only moment this function is called.
+ * 2. The part of the day, matched against each session's real start time, so
+ *    "morning" works without the model having produced a bandHint.
+ * 3. The session's own name, by word overlap rather than containment — "OPD"
+ *    and "morning clinic" both reach "Morning OPD".
+ * 4. Nothing. A question, never a guess.
+ */
+export function resolveSessionChoice(text, sessions) {
+  if (!sessions?.length) return null
+
+  const pick = parseChoice(text, sessions.length)
+  if (pick) return sessions[pick - 1]
+
   const q = strip(text)
-  if (q) {
-    const named = sessions.filter(s => q.includes(strip(s.name)))
-    if (named.length === 1) return named[0]
+  if (!q) return null
+
+  // "morning" / "सुबह" / "सकाळी" against the clock the doctor typed.
+  for (const [band, words] of Object.entries(BAND_WORDS)) {
+    if (words.some(w => q.split(' ').includes(w))) {
+      const hits = sessions.filter(s => bandOf(s) === band)
+      if (hits.length === 1) return hits[0]
+    }
+  }
+
+  // Word overlap, so a partly-remembered name still lands.
+  const said = new Set(q.split(' ').filter(w => w.length > 2))
+  if (said.size) {
+    const scored = sessions
+      .map(s => ({
+        s,
+        hits: strip(s.name).split(' ').filter(w => w.length > 2 && said.has(w)).length
+      }))
+      .filter(r => r.hits > 0)
+      .sort((a, b) => b.hits - a.hits)
+    if (scored.length === 1 || (scored.length > 1 && scored[0].hits > scored[1].hits)) {
+      return scored[0].s
+    }
   }
 
   return null
+}
+
+/**
+ * Parts of the day, in the three languages the app speaks.
+ *
+ * Matched as whole words against the transcript so that this works when the
+ * model's `bandHint` extraction fails or is skipped — a one-word answer is
+ * exactly the turn most likely to produce no hints at all.
+ */
+const BAND_WORDS = {
+  morning: ['morning', 'am', 'subah', 'savere', 'सुबह', 'सवेरे', 'सकाळ', 'सकाळी'],
+  afternoon: ['afternoon', 'noon', 'dopahar', 'दोपहर', 'दुपार', 'दुपारी'],
+  evening: ['evening', 'night', 'pm', 'shaam', 'sham', 'raat', 'शाम', 'रात', 'संध्याकाळ', 'संध्याकाळी', 'रात्री']
 }
 
 /**
@@ -190,25 +241,23 @@ export const listSessions = (sessions) =>
 /**
  * A name the patient said, matched against doctors that exist.
  *
- * Returns the doctor only on an unambiguous match. Two doctors called Sharma is
- * a question to ask, not a coin to flip, and a name we cannot place at all is
- * never quietly resolved to the nearest thing.
+ * Scoring lives in `doctorMatch` — accents make exact and substring matching
+ * useless for speech. Two ways in, tried in order: the name the model isolated
+ * from the sentence, then the raw sentence itself, because a failed extraction
+ * should not lose a name the patient clearly said.
+ *
+ * Still returns the doctor only on an unambiguous match. Two doctors who sound
+ * alike is a question to ask, not a coin to flip.
  */
-export function resolveDoctor(hint, doctors) {
-  const q = strip(hint)
-  if (!q || !doctors?.length) return { doctor: null, candidates: [] }
+export function resolveDoctor(hint, doctors, rawText = '') {
+  if (!doctors?.length) return { doctor: null, candidates: [], confidence: 0 }
 
-  const exact = doctors.filter(d => strip(d.name) === q)
-  if (exact.length === 1) return { doctor: exact[0], candidates: [] }
+  const fromHint = matchDoctor(hint, doctors)
+  if (fromHint.doctor || fromHint.candidates.length) return fromHint
 
-  // "Meera", "Dr Meera", "Meera Sharma" all reach the same person.
-  const parts = q.split(' ').filter(w => w.length > 2 && !['dr', 'doctor', 'डॉ', 'डॉ.', 'डा.', 'डॉक्टर', 'ਡਾ', 'ডাঃ', 'ডাক্তার', 'ডা.'].includes(w))
-  const loose = doctors.filter(d => {
-    const name = strip(d.name)
-    return parts.length > 0 && parts.every(p => name.includes(p))
-  })
-  if (loose.length === 1) return { doctor: loose[0], candidates: [] }
-  return { doctor: null, candidates: loose }
+  // The extractor found no name, or found one that matches nobody. The
+  // sentence may still contain it.
+  return matchDoctor(rawText, doctors)
 }
 
 /**
@@ -231,22 +280,6 @@ export function resolveDate(hint) {
 }
 
 /**
- * An hour, matched only against slots this doctor genuinely has free today.
- *
- * "5 बजे" is 5 or 17 — so both are tried, but only against the free list. If
- * five o'clock is taken it simply does not match, which is the point: a slot
- * cannot be selected by asking for it, only by it actually being available.
- */
-export function resolveSlot(hour, availableSlots) {
-  if (!Number.isInteger(hour) || !availableSlots?.length) return null
-  const wanted = [hour, hour < 12 ? hour + 12 : hour - 12]
-  const hits = availableSlots.filter(s => wanted.includes(Number(s.split(':')[0])))
-  return hits.length === 1 ? hits[0] : null
-}
-
-export const listSlots = (slots, lang) => slots.map(s => slotLabel(s, lang)).join(', ')
-
-/**
  * The only write in the voice path, and it goes through the same endpoint the
  * manual form uses — same JWT, same role check, same slot pre-check, same
  * unique index. `patientId` is not sent: the server takes identity from the
@@ -256,10 +289,7 @@ export async function submitBooking(draft) {
   const form = new FormData()
   form.append('doctorId', draft.doctorId)
   form.append('requestedDate', draft.requestedDate)
-  // A session booking and an hourly one are the same request to the same
-  // endpoint; only which field is present differs.
-  if (draft.sessionId) form.append('sessionId', draft.sessionId)
-  else form.append('timeSlot', draft.timeSlot)
+  form.append('sessionId', draft.sessionId)
   form.append('symptoms', draft.symptoms || '')
   form.append('consultationType', draft.consultationType || 'video')
   const { data } = await api.post('/appointments/book', form)

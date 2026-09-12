@@ -22,7 +22,7 @@ function send(res, event) {
 }
 
 function normaliseLang(lang) {
-    return ['en', 'hi', 'pa', 'mr', 'bn'].includes(lang) ? lang : 'en';
+    return ['en', 'hi', 'mr', 'bn'].includes(lang) ? lang : 'en';
 }
 
 /**
@@ -167,6 +167,13 @@ export const chat = async (req, res) => {
     ]);
 
     if (citations.length) send(res, { type: 'citations', items: citations });
+
+    if (!urgent && guidance?.goal === 'FIND_DOCTOR') {
+        const hints = await extractBookingHints({ messages: history, lang: locale, signal: controller.signal }).catch(() => null);
+        if (hints) {
+            send(res, { type: 'booking_hints', hints });
+        }
+    }
 
     /**
      * Decision support, sent as its own event so the client renders it beside
@@ -379,7 +386,7 @@ export const summarise = async (req, res) => {
         const text = await generateOnce({
             systemInstruction: `Summarise this patient's own account for the doctor who will see them.
 
-Write 3 to 5 short lines, in ${locale === 'hi' ? 'Hindi' : locale === 'pa' ? 'Punjabi' : locale === 'mr' ? 'Marathi' : locale === 'bn' ? 'Bengali' : 'English'}:
+Write 3 to 5 short lines, in ${locale === 'hi' ? 'Hindi' : locale === 'mr' ? 'Marathi' : locale === 'bn' ? 'Bengali' : 'English'}:
 - What they are complaining of, in their own words
 - How long it has been going on
 - Anything relevant they mentioned (medicines, existing conditions, what they already tried)

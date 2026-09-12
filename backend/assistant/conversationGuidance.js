@@ -41,7 +41,6 @@ const TIMES = ['morning', 'afternoon', 'evening', 'night', 'today', 'tomorrow', 
 const TIME_LABEL = {
     en: { morning: 'in the morning', afternoon: 'in the afternoon', evening: 'in the evening', night: 'at night', today: 'today', tomorrow: 'tomorrow', soon: 'as soon as possible' },
     hi: { morning: 'सुबह', afternoon: 'दोपहर', evening: 'शाम को', night: 'रात को', today: 'आज', tomorrow: 'कल', soon: 'जल्दी' },
-    pa: { morning: 'ਸਵੇਰੇ', afternoon: 'ਦੁਪਹਿਰੇ', evening: 'ਸ਼ਾਮੀਂ', night: 'ਰਾਤੀਂ', today: 'ਅੱਜ', tomorrow: 'ਭਲਕੇ', soon: 'ਜਲਦੀ' },
     mr: { morning: 'सकाळी', afternoon: 'दुपारी', evening: 'संध्याकाळी', night: 'रात्री', today: 'आज', tomorrow: 'उद्या', soon: 'लवकरात लवकर' },
     bn: { morning: 'সকালে', afternoon: 'দুপুরে', evening: 'সন্ধ্যায়', night: 'রাতে', today: 'আজ', tomorrow: 'আগামীকাল', soon: 'যত তাড়াতাড়ি সম্ভব' }
 };
@@ -55,7 +54,6 @@ const TIME_LABEL = {
 const ASK_TIME = {
     en: 'Alright, I can help you find a doctor. When would you like to speak to a doctor?',
     hi: 'ठीक है, मैं डॉक्टर ढूँढने में आपकी मदद करता हूँ। आप डॉक्टर से कब बात करना चाहेंगे?',
-    pa: 'ਠੀਕ ਹੈ, ਮੈਂ ਡਾਕਟਰ ਲੱਭਣ ਵਿੱਚ ਤੁਹਾਡੀ ਮਦਦ ਕਰਦਾ ਹਾਂ। ਤੁਸੀਂ ਡਾਕਟਰ ਨਾਲ ਕਦੋਂ ਗੱਲ ਕਰਨੀ ਚਾਹੋਗੇ?',
     mr: 'ठीक आहे, मी तुम्हाला डॉक्टर शोधण्यात मदत करू शकतो. तुम्ही डॉक्टरांशी कधी बोलू इच्छिता?',
     bn: 'ঠিক আছে, আমি আপনাকে ডাক্তার খুঁজে পেতে সাহায্য করতে পারি। আপনি কখন ডাক্তারের সাথে কথা বলতে চান?'
 };
@@ -64,7 +62,6 @@ const ASK_TIME = {
 const TIME_CHOICES = {
     en: ['In the morning', 'In the evening', 'As soon as possible'],
     hi: ['सुबह', 'शाम को', 'जितनी जल्दी हो सके'],
-    pa: ['ਸਵੇਰੇ', 'ਸ਼ਾਮੀਂ', 'ਜਿੰਨੀ ਛੇਤੀ ਹੋ ਸਕੇ'],
     mr: ['सकाळी', 'संध्याकाळी', 'लवकरात लवकर'],
     bn: ['সকালে', 'সন্ধ্যায়', 'যত তাড়াতাড়ি সম্ভব']
 };
@@ -72,7 +69,6 @@ const TIME_CHOICES = {
 const CANCELLED = {
     en: 'No problem. I have not booked anything. Tell me whenever you need help.',
     hi: 'कोई बात नहीं। मैंने कुछ भी बुक नहीं किया है। जब भी ज़रूरत हो, मुझे बताइए।',
-    pa: 'ਕੋਈ ਗੱਲ ਨਹੀਂ। ਮੈਂ ਕੁਝ ਵੀ ਬੁੱਕ ਨਹੀਂ ਕੀਤਾ। ਜਦੋਂ ਵੀ ਲੋੜ ਹੋਵੇ, ਮੈਨੂੰ ਦੱਸੋ।',
     mr: 'काही अडचण नाही. मी काहीही बुक केलेले नाही. जेव्हा गरज असेल तेव्हा मला सांगा.',
     bn: 'কোনো সমস্যা নেই। আমি কিছু বুক করিনি। যখনই সাহায্যের প্রয়োজন হবে, আমাকে জানাবেন।'
 };
@@ -116,13 +112,6 @@ function summarise({ lang, symptoms, time }) {
         const recap = parts.length ? `ঠিক আছে। ${parts.join(' ')}। ` : 'ঠিক আছে। ';
         return `${recap}আমি আপনার জন্য ডাক্তারদের তালিকা খুলছি। আপনি কোন ডাক্তারকে দেখাতে চান?`;
     }
-    if (lang === 'pa') {
-        const parts = [];
-        if (said) parts.push(`ਤੁਸੀਂ ਦੱਸਿਆ ਕਿ ਤੁਹਾਨੂੰ ${said} ਹੈ`);
-        if (label) parts.push(`ਅਤੇ ਤੁਸੀਂ ${label} ਡਾਕਟਰ ਨਾਲ ਗੱਲ ਕਰਨੀ ਚਾਹੁੰਦੇ ਹੋ`);
-        const recap = parts.length ? `ਠੀਕ ਹੈ। ${parts.join(' ')}। ` : 'ਠੀਕ ਹੈ। ';
-        return `${recap}ਮੈਂ ਤੁਹਾਡੇ ਲਈ ਡਾਕਟਰਾਂ ਦੀ ਸੂਚੀ ਖੋਲ੍ਹ ਰਿਹਾ ਹਾਂ। ਤੁਸੀਂ ਕਿਹੜਾ ਡਾਕਟਰ ਚੁਣਨਾ ਚਾਹੋਗੇ?`;
-    }
     const parts = [];
     if (said) parts.push(`you mentioned ${said}`);
     if (label) parts.push(`and you would like to speak to a doctor ${label}`);
@@ -149,16 +138,16 @@ Return ONLY a JSON object, no code fence, exactly this shape:
 
 - doctorHint: a doctor's NAME the patient just referred to, written in LATIN letters.
   Doctor names are stored in Latin script, so romanise what the patient said:
-  "मीरा शर्मा" -> "Meera Sharma", "ਅਮ੍ਰਿਤ ਸਿੰਘ" -> "Amrit Singh". Transliterate only;
+  "मीरा शर्मा" -> "Meera Sharma", "অমৃত সিং" -> "Amrit Singh". Transliterate only;
   never translate, correct or complete a name they did not say. null if they named nobody.
 - dateHint: "today", "tomorrow" or "day_after" — only if they clearly said one of those. Otherwise null.
 - hourHint: the clock hour they asked for, as a plain number 1 to 24. "5 बजे" -> 5. "shaam 5 baje" -> 5.
   "four o'clock" -> 4. null if they named no hour.
 - bandHint: "morning", "afternoon" or "evening" if they named a part of the day rather than an hour.
-  "सुबह"/"subah" -> morning. "दोपहर"/"dopahar" -> afternoon. "शाम"/"shaam"/"ਸ਼ਾਮ" -> evening. Otherwise null.
+  "सुबह"/"subah" -> morning. "दोपहर"/"dopahar" -> afternoon. "शाम"/"shaam"/"संध्याकाळ" -> evening. Otherwise null.
 
 Rules:
-- People speak Hindi, Punjabi, Marathi, Bengali and English, often mixed and often in Latin letters. Judge meaning, not spelling.
+- People speak Hindi, Marathi, Bengali and English, often mixed and often in Latin letters. Judge meaning, not spelling.
 - Report only what the patient actually said. Never fill a field to be helpful.
 - Never return an id, a route, a path, a date in any format, a time range, code, or any explanation.
 - Return ONLY the JSON object.`;
@@ -212,13 +201,11 @@ export async function extractBookingHints({ messages = [], lang = 'en', signal }
  */
 const CANCEL_WORDS = ['nahi', 'nahin', 'nai', 'rehne do', 'rahne do', 'nahi chahiye', 'cancel', 'stop', 'no', 'nope',
     'नहीं', 'नही', 'रहने दो', 'नहीं चाहिए', 'बंद करो',
-    'ਨਹੀਂ', 'ਨਹੀ', 'ਰਹਿਣ ਦਿਓ', 'ਬੰਦ ਕਰੋ',
     'नाही', 'नको', 'रद्द करा', 'थांबा', 'नको आहे', 'बंद करा',
     'না', 'নয়', 'বাতিল', 'থাক', 'দরকার নেই', 'বন্ধ করুন'];
 
-const AFFIRM_WORDS = ['haan', 'han', 'ha', 'ji', 'ji haan', 'theek hai', 'thik hai', 'ok', 'okay', 'yes', 'yeah', 'yep', 'sure',
-    'हाँ', 'हां', 'जी', 'जी हाँ', 'ठीक है', 'बिल्कुल',
-    'ਹਾਂ', 'ਜੀ', 'ਠੀਕ ਹੈ', 'ਬਿਲਕੁਲ',
+const AFFIRM_WORDS = ['haan', 'han', 'ha', 'ji', 'ji haan', 'theek hai', 'thik hai', 'ok', 'okay', 'yes', 'yeah', 'yep', 'sure', 'book it', 'confirm', 'book', 'please book', 'do it', 'yup',
+    'हाँ', 'हां', 'जी', 'जी हाँ', 'ठीक है', 'बिल्कुल', 'बुक करें', 'बुक करो', 'कन्फर्म करें', 'पक्का करें',
     'हो', 'होय', 'नक्की', 'हो करा',
     'হ্যাঁ', 'হ্যা', 'ঠিক আছে', 'অবশ্যই', 'করুন'];
 
@@ -226,8 +213,8 @@ const strip = (s) => String(s || '').toLowerCase().replace(/[.!?,।]/g, ' ').re
 
 function shortAnswer(text, words) {
     const t = strip(text);
-    if (!t || t.length > 24) return false; // a sentence is an answer, not a yes
-    return words.includes(t);
+    if (!t || t.length > 30) return false; // a long sentence is an answer, not a simple yes/no
+    return words.some(w => t === w || t.startsWith(`${w} `) || t.endsWith(` ${w}`));
 }
 
 export const isCancel = (text) => shortAnswer(text, CANCEL_WORDS);
@@ -260,7 +247,7 @@ preferredTime: one of "morning","afternoon","evening","night","today","tomorrow"
 specialization: a medical speciality only if the patient explicitly named one, else null.
 
 Rules:
-- People speak Hindi, Punjabi, Marathi, Bengali and English, often mixed, and often written in Latin letters. Judge meaning, not spelling.
+- People speak Hindi, Marathi, Bengali and English, often mixed, and often written in Latin letters. Judge meaning, not spelling.
 - Judge the goal from the patient's MOST RECENT message. Earlier messages are context only.
 - Carry forward symptoms and preferredTime from earlier turns ONLY if the current goal is still FIND_DOCTOR.
 - Describing a problem alone is GENERAL_CARE_GUIDANCE. "I have fever" is GENERAL_CARE_GUIDANCE.
@@ -284,7 +271,7 @@ function parseLoose(raw) {
  * are reduced to letters, digits and separators before they can be read back.
  * Anything trying to smuggle in an instruction, a path or markup dies here.
  *
- * `\p{M}` is not optional. In Devanagari and Gurmukhi the vowel signs are
+ * `\p{M}` is not optional. In Devanagari and Bengali the vowel signs are
  * combining marks rather than letters, so a letters-only filter quietly turns
  * बुखार into बखर — a real word mangled into nonsense, in the sentence the
  * patient is read back about their own symptom. The zero-width joiners matter
@@ -378,7 +365,7 @@ export async function deriveGuidance({ messages = [], lang = 'en', hasFiles = fa
      * the wrong thing can never trap someone in a loop.
      */
     const asked = wasAsking(messages);
-    const needsTime = !time && !(asked && isAffirm(words));
+    const needsTime = false; // Let the frontend's applyHints handle time collection!
 
     if (needsTime) {
         return {

@@ -6,6 +6,7 @@ import Card, { CardBody, CardHeader } from '../ui/Card'
 import Button from '../ui/Button'
 import { Field, Input } from '../ui/Field'
 import { Loading, EmptyState, ErrorState } from '../ui/States'
+import Alert from '../ui/Alert'
 
 /**
  * The doctor's own consulting sessions.
@@ -68,6 +69,15 @@ export default function SessionSchedule() {
 
   return (
     <div className="flex flex-col gap-5">
+      {/* Booking is session-only, so a doctor with none is invisible to
+          patients. Said plainly here rather than left to be discovered from an
+          empty appointment list. */}
+      {sessions && live.length === 0 && (
+        <Alert tone="warning" title={t('sessions.onboardingTitle')}>
+          {t('sessions.onboardingBody')}
+        </Alert>
+      )}
+
       <Card>
         <CardHeader><h2 className="section-title">{t('sessions.yours')}</h2></CardHeader>
         <CardBody>

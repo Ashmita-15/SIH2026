@@ -86,9 +86,26 @@ export const updatePassword = async (req, res) => {
     }
 };
 
+/**
+ * A doctor is bookable when they have configured at least one active session.
+ *
+ * Booking is session-only, so a doctor with no session has nothing a patient
+ * could book — listing them produces a dead end where the picker shows "no
+ * clinic on any day". They are not deleted or deactivated: the account works,
+ * and the moment a session is added they appear here.
+ *
+ * `sessions.active` must be matched with $elemMatch. A plain
+ * `{'sessions.active': true}` is satisfied by *any* element, so a doctor whose
+ * only session had been switched off would still have counted.
+ */
+const BOOKABLE_DOCTOR = {
+    role: 'doctor',
+    sessions: { $elemMatch: { active: true } }
+};
+
 export const getDoctors = async (req, res) => {
     try {
-        const doctors = await User.find({ role: 'doctor' }).select('-passwordHash');
+        const doctors = await User.find(BOOKABLE_DOCTOR).select('-passwordHash');
         res.json(doctors);
     } catch (e) {
         res.status(500).json({ message: e.message });
@@ -97,9 +114,8 @@ export const getDoctors = async (req, res) => {
 
 export const getDoctorsBySpecialization = async (req, res) => {
     try {
-        // Get all doctors first
-        const doctors = await User.find({ role: 'doctor' }).select('-passwordHash');
-        
+        const doctors = await User.find(BOOKABLE_DOCTOR).select('-passwordHash');
+
         // Group doctors by specialization
         const doctorsBySpecialization = doctors.reduce((acc, doctor) => {
             const specialization = doctor.specialization || 'General';
