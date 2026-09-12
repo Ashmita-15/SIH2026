@@ -4,8 +4,7 @@ import {
   getPushPermissionStatus,
   getCurrentPushSubscription,
   subscribeToPush,
-  unsubscribeFromPush,
-  sendTestNotification
+  unsubscribeFromPush
 } from '../../lib/pushNotifications.js';
 
 export default function NotificationBell({ className = '' }) {
@@ -97,25 +96,6 @@ export default function NotificationBell({ className = '' }) {
       }
     } catch (err) {
       setFeedback({ type: 'error', message: 'Error disabling notifications.' });
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleTestNotification = async () => {
-    setLoading(true);
-    setFeedback(null);
-    try {
-      const data = await sendTestNotification();
-      setFeedback({
-        type: 'success',
-        message: data.message || 'Test notification dispatched to your device!'
-      });
-    } catch (err) {
-      setFeedback({
-        type: 'error',
-        message: err.response?.data?.message || 'Failed to dispatch test notification.'
-      });
     } finally {
       setLoading(false);
     }
@@ -285,12 +265,11 @@ export default function NotificationBell({ className = '' }) {
               <div className="flex items-center gap-2">
                 <button
                   type="button"
-                  id="test-push-notification-btn"
-                  onClick={handleTestNotification}
-                  disabled={loading}
-                  className="flex-1 py-1.5 px-3 bg-surface-2 hover:bg-surface-3 text-ink rounded-control text-small font-medium border border-line transition-colors disabled:opacity-50"
+                  disabled
+                  className="flex-1 py-1.5 px-3 bg-emerald-50 text-emerald-800 rounded-control text-small font-medium border border-emerald-200 cursor-default flex items-center justify-center gap-1.5"
                 >
-                  {loading ? 'Sending...' : 'Send Test Alert'}
+                  <span className="text-emerald-600 font-bold">✓</span>
+                  <span>Active</span>
                 </button>
                 <button
                   type="button"
@@ -299,7 +278,7 @@ export default function NotificationBell({ className = '' }) {
                   disabled={loading}
                   className="py-1.5 px-3 text-rose-600 hover:bg-rose-50 rounded-control text-caption font-medium transition-colors disabled:opacity-50"
                 >
-                  Disable
+                  {loading ? 'Disabling...' : 'Disable'}
                 </button>
               </div>
             )}
