@@ -649,14 +649,18 @@ const ORDER_STATUS_TYPES = {
 export async function notifyPharmacyNewOrder({ order, pharmacyOwnerId }) {
     const jobs = [];
     const orderId = order?._id;
+    const humanOrderId = order?.orderId || 'your medicine order';
+    const isOnlinePaid = order?.paymentMethod === 'online' && order?.paymentStatus === 'paid';
 
     // Pharmacy owner gets in-app + push
     if (pharmacyOwnerId) {
         jobs.push(createNotification({
             userId: pharmacyOwnerId,
             type: 'PHARMACY_ORDER_PLACED',
-            title: 'New Pharmacy Order',
-            body: 'A new medicine order has been received at your pharmacy.',
+            title: isOnlinePaid ? 'New Paid Pharmacy Order' : 'New Pharmacy Order',
+            body: isOnlinePaid 
+                ? `Paid medicine order ${humanOrderId} received via Razorpay.` 
+                : `A new medicine order (${humanOrderId}) has been received at your pharmacy.`,
             link: '/#/pharmacy',
             priority: 'high',
             entityType: 'order',
@@ -671,8 +675,10 @@ export async function notifyPharmacyNewOrder({ order, pharmacyOwnerId }) {
         jobs.push(createNotification({
             userId: patientId,
             type: 'PHARMACY_ORDER_PLACED',
-            title: 'Order Placed Successfully',
-            body: 'Your medicine order has been placed. The pharmacy will confirm it shortly.',
+            title: isOnlinePaid ? 'Payment Successful' : 'Order Placed Successfully',
+            body: isOnlinePaid
+                ? `Your medicine order ${humanOrderId} has been confirmed.`
+                : `Your medicine order ${humanOrderId} has been placed successfully.`,
             link: `/#/patient/medicine/orders/${orderId}`,
             entityType: 'order',
             entityId: orderId ? String(orderId) : null,
@@ -682,6 +688,22 @@ export async function notifyPharmacyNewOrder({ order, pharmacyOwnerId }) {
 
     return Promise.allSettled(jobs);
 }
+
+export async function notifyPharmacyPaymentFailed({ userId, orderId, humanOrderId }) {
+    if (!userId) return;
+    return createNotification({
+        userId,
+        type: 'PHARMACY_ORDER_CANCELLED',
+        title: 'Payment Failed',
+        body: `We couldn't complete payment for your medicine order${humanOrderId ? ` ${humanOrderId}` : ''}.`,
+        link: '/#/patient/medicine/cart',
+        priority: 'high',
+        entityType: 'order',
+        entityId: orderId ? String(orderId) : null,
+        data: { orderId: String(orderId || ''), failure: true }
+    }).catch(() => {});
+}
+
 
 export async function notifyPharmacyOrderStatus({ order, status, note }) {
     const userId = order?.userId?._id || order?.userId;
@@ -726,5 +748,6 @@ export default {
     notifyDoctorSessionSchedule,
     notifyDiagnosticCompleted,
     notifyPharmacyNewOrder,
+    notifyPharmacyPaymentFailed,
     notifyPharmacyOrderStatus
 };

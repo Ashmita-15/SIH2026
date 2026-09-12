@@ -559,6 +559,11 @@
       "ayurvedic": "Ayurvedic",
       "homeopathic": "Homeopathic",
       "vitamins": "Vitamins"
+    },
+    "orders": {
+      "title": "My Medicine Orders",
+      "empty": "No medicine orders yet",
+      "emptyHelp": "Your medicine orders will appear here after you place an order."
     }
   },
   "emergency": {
@@ -582,7 +587,8 @@
     "notFoundMessage": "The page you're looking for doesn't exist or has moved.",
     "notFoundCta": "Go to home",
     "crashHelp": "The page ran into a problem. Reloading usually fixes it — your data is safe.",
-    "reload": "Reload the page"
+    "reload": "Reload the page",
+    "backHome": "Back to Dashboard"
   },
   "hospital": {
     "title": "Hospital",
@@ -786,9 +792,50 @@
     "orderSummary": "Order summary",
     "paymentMethod": "Payment method",
     "cod": "Cash on delivery",
-    "codHelp": "Pay when you receive your order",
+    "codHelp": "Pay when your medicine arrives",
+    "onlinePayment": "Online Payment",
+    "onlinePaymentHelp": "UPI, Cards, Netbanking & Wallets",
+    "paySecurely": "Pay ₹{{amount}} Securely",
+    "initiatingPayment": "Creating secure payment…",
+    "verifyingPayment": "Verifying payment…",
+    "paymentSuccess": "Payment successful!",
+    "paymentSuccessHelp": "Your payment has been verified and your medicine order is confirmed.",
+    "paymentFailed": "Payment Unsuccessful",
+    "paymentFailedHelp": "Your payment could not be completed. Your cart has been preserved.",
+    "paymentCancelled": "Payment Cancelled",
+    "paymentCancelledHelp": "You closed the payment window. Your cart is safe and you can try again.",
+    "tryAgain": "Try Online Payment Again",
+    "chooseCod": "Choose Cash on Delivery",
+    "poweredByRazorpay": "Secure payment powered by Razorpay",
+    "validPhone": "Valid Indian mobile number",
+    "paid": "Paid",
     "placeOrder": "Place order",
-    "submitting": "Placing order…"
+    "submitting": "Placing order…",
+    "orderPlaced": "Order placed successfully!",
+    "orderPlacedHelp": "Your medicine order has been placed. We'll keep you updated about your order status.",
+    "orderId": "Order ID",
+    "orderDate": "Order date",
+    "orderStatus": "Order status",
+    "trackOrder": "Track order",
+    "viewOrders": "View my orders",
+    "continueShopping": "Continue shopping",
+    "items": "Items",
+    "subtotal": "Subtotal",
+    "deliveryFee": "Delivery fee",
+    "freeDelivery": "Free",
+    "total": "Total",
+    "needHelp": "Need help?",
+    "contactPharmacy": "Contact the pharmacy directly for any questions about dispensing or delivery.",
+    "timelineTitle": "Order Progress",
+    "timeline": {
+      "pending": "Order Placed",
+      "confirmed": "Order Confirmed",
+      "preparing": "Being Prepared",
+      "ready": "Ready for Pickup",
+      "dispatched": "On the Way",
+      "delivered": "Delivered",
+      "cancelled": "Order Cancelled"
+    }
   },
   "booking": {
     "askDoctor": "Which doctor would you like to see?",

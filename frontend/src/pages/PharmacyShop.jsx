@@ -204,8 +204,9 @@ export default function PharmacyShop() {
 
   return (
     <PageLayout title={pharmacy.name}>
-      {/* Pharmacy Header */}
-      <div className="card mb-6">
+      <div className="pb-28 sm:pb-32">
+        {/* Pharmacy Header */}
+        <div className="card mb-6">
         <div className="card-body">
           <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-6">
             <div className="min-w-0">
@@ -498,14 +499,15 @@ export default function PharmacyShop() {
         </div>
       )}
 
-      {!user && (
-        <div className="mt-8 text-center">
-          <div className="text-muted mb-4">Please login as a patient to add medicines to cart</div>
-          <Link to="/login" className="btn btn-primary">
-            Login
-          </Link>
-        </div>
-      )}
+        {!user && (
+          <div className="mt-8 text-center">
+            <div className="text-muted mb-4">Please login as a patient to add medicines to cart</div>
+            <Link to="/login" className="btn btn-primary">
+              Login
+            </Link>
+          </div>
+        )}
+      </div>
     </PageLayout>
   )
 }
