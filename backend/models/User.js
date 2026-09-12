@@ -53,7 +53,7 @@ const userSchema = new mongoose.Schema({
         coordinates: { type: [Number] } // [longitude, latitude]
     },
     facilityLocationAccuracy: { type: Number },
-    facilityAddress: { type: String }
+    facilityAddress: { type: String },
     workerType: { type: String, enum: ['asha', 'anm', 'cho'] },
     age: { type: Number },
     gender: { type: String, enum: ['female', 'male', 'other'] },
