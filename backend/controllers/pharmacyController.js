@@ -1113,12 +1113,13 @@ export const getOrderById = async (req, res) => {
 
         const orderUserId = String(order.userId?._id || order.userId);
         const pharmacyOwnerId = String(order.pharmacyId?.ownerId?._id || order.pharmacyId?.ownerId);
-        const currentUserId = String(req.user.id);
+        const currentUserId = String(req.user?.id || req.user?._id || '');
 
         const isPatient = orderUserId === currentUserId;
         const isPharmacy = pharmacyOwnerId === currentUserId;
+        const isAdmin = req.user?.role === 'admin';
 
-        if (!isPatient && !isPharmacy) {
+        if (!isPatient && !isPharmacy && !isAdmin) {
             return res.status(403).json({ message: 'Access denied' });
         }
         

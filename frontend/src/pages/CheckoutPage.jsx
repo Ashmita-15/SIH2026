@@ -226,7 +226,7 @@ export default function CheckoutPage() {
 
               toast.success(t('checkout.paymentSuccess', 'Payment successful!'))
               navigate(`/patient/medicine/orders/${verifiedOrder._id}`, {
-                state: { isNewOrder: true, paymentSuccess: true }
+                state: { isNewOrder: true, paymentSuccess: true, order: verifiedOrder }
               })
             } catch (verifyError) {
               console.error('Payment verification failed:', verifyError)
@@ -281,7 +281,7 @@ export default function CheckoutPage() {
       const { data } = await api.post('/pharmacy/orders', orderData)
       
       // Redirect to order success page with new order indicator
-      navigate(`/patient/medicine/orders/${data._id}`, { state: { isNewOrder: true } })
+      navigate(`/patient/medicine/orders/${data._id}`, { state: { isNewOrder: true, order: data } })
       
     } catch (error) {
       console.error('Order failed:', error)

@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from 'react'
+import React, { useEffect, useState, useCallback, useMemo, useRef } from 'react'
 import { useParams, useNavigate, useLocation, Link } from 'react-router-dom'
 import PageLayout from '../components/PageLayout'
 import { useToast } from '../components/ui/Toast'
@@ -12,7 +12,7 @@ import { orderStatus, formatDate } from '../lib/status'
 import { useTranslation } from 'react-i18next'
 import { io } from 'socket.io-client'
 
-const SOCKET_URL = import.meta.env.VITE_SIGNAL_URL || 'http://localhost:5000'
+const SOCKET_URL = import.meta.env.VITE_SIGNAL_URL || import.meta.env.VITE_API_URL?.replace(/\/api\/?$/, '') || 'http://localhost:5000'
 
 // ─── Status timeline step definition ──────────────────────────────────────────
 
@@ -46,17 +46,37 @@ export default function OrderSuccess() {
   const { orderId } = useParams()
   const navigate = useNavigate()
   const location = useLocation()
-  const user = JSON.parse(localStorage.getItem('user') || 'null')
 
-  const [order, setOrder] = useState(null)
-  const [loading, setLoading] = useState(true)
+  // Safely parse user once with useMemo to avoid creating new object references every render
+  const user = useMemo(() => {
+    try {
+      return JSON.parse(localStorage.getItem('user') || 'null')
+    } catch {
+      return null
+    }
+  }, [])
+
+  const userId = user?.id || user?._id
+
+  // If order was passed in router state (from checkout completion), use it immediately without loading flicker
+  const initialOrder = (location.state?.order && (location.state.order._id === orderId || location.state.order.orderId === orderId))
+    ? location.state.order
+    : null
+
+  const [order, setOrder] = useState(initialOrder)
+  const [loading, setLoading] = useState(!initialOrder)
   const [refreshing, setRefreshing] = useState(false)
   const [loadError, setLoadError] = useState(false)
+
+  // Keep a ref to the current order id for socket callbacks without triggering effect re-runs
+  const currentOrderIdRef = useRef(orderId)
+  currentOrderIdRef.current = orderId
 
   // Flag indicating whether the patient landed directly from completing checkout
   const isNewOrder = Boolean(location.state?.isNewOrder)
 
   const fetchOrder = useCallback(async (isSilent = false) => {
+    if (!orderId) return
     if (!isSilent) setLoading(true)
     else setRefreshing(true)
     setLoadError(false)
@@ -73,37 +93,48 @@ export default function OrderSuccess() {
     }
   }, [orderId])
 
+  // Authentication & Initial Data Fetch
+  // Crucial: depends ONLY on orderId. Never depend on newly allocated object references like 'user'!
   useEffect(() => {
-    if (!user || user.role !== 'patient') {
+    const storedUser = JSON.parse(localStorage.getItem('user') || 'null')
+    if (!storedUser || storedUser.role !== 'patient') {
       navigate('/login')
       return
     }
-    fetchOrder()
-  }, [fetchOrder, navigate, user])
+
+    // Only fetch from API if we don't already have the matching order loaded from navigation state
+    if (!order || (order._id !== orderId && order.orderId !== orderId)) {
+      fetchOrder()
+    }
+  }, [orderId, fetchOrder, navigate])
 
   // Real-time status update subscription
+  // Depends ONLY on stable primitive strings [orderId, userId]
   useEffect(() => {
-    if (!user?.id && !user?._id) return
+    if (!userId || !orderId) return
 
     const socket = io(SOCKET_URL, {
       reconnectionAttempts: 3,
       timeout: 5000
     })
 
-    const userId = user.id || user._id
     socket.emit('join-user-room', userId)
 
-    socket.on('order-status-updated', (data) => {
-      if (data.orderId === orderId || data.orderId === order?._id) {
+    const handleStatusUpdate = (data) => {
+      if (data?.orderId === currentOrderIdRef.current) {
         toast.info(t(`status.order.${data.status}`, `Order status updated: ${data.status}`))
         fetchOrder(true)
       }
-    })
+    }
+
+    socket.on('order-status-updated', handleStatusUpdate)
 
     return () => {
+      socket.off('order-status-updated', handleStatusUpdate)
       socket.disconnect()
     }
-  }, [orderId, order?._id, user, fetchOrder, t, toast])
+  }, [orderId, userId, fetchOrder, t, toast])
+
 
   if (loading) {
     return (
