@@ -41,6 +41,7 @@ export default function DoctorAppointments({ mode = 'all', onJoinRoom }) {
   const [confirmData, setConfirmData] = useState({ confirmedDate: '', timeSlot: '', doctorNotes: '' })
   const [declineTarget, setDeclineTarget] = useState(null)
   const [declineReason, setDeclineReason] = useState('')
+  const [completingId, setCompletingId] = useState(null)
 
   const load = useCallback(async () => {
     if (!userId) return
@@ -102,6 +103,21 @@ export default function DoctorAppointments({ mode = 'all', onJoinRoom }) {
       toast.error(friendlyError(err))
     } finally {
       setBusy(false)
+    }
+  }
+
+  const completeConsultation = async (appointmentId) => {
+    setCompletingId(appointmentId)
+    try {
+      await api.put(`/appointments/${appointmentId}/complete`)
+      window.dispatchEvent(new CustomEvent('appointments:changed'))
+      toast.success(t('status.appointment.completed'))
+      await load()
+    } catch (err) {
+      console.error('Complete failed:', err)
+      toast.error(friendlyError(err))
+    } finally {
+      setCompletingId(null)
     }
   }
 
@@ -195,10 +211,22 @@ export default function DoctorAppointments({ mode = 'all', onJoinRoom }) {
                     </Button>
                   </>
                 )}
-                {appointment.status === 'confirmed' && onJoinRoom && (
-                  <Button size="sm" onClick={() => onJoinRoom(appointment._id)}>
-                    {t('appointments.startConsultation')}
-                  </Button>
+                {appointment.status === 'confirmed' && (
+                  <div className="flex items-center gap-2">
+                    {onJoinRoom && (
+                      <Button size="sm" onClick={() => onJoinRoom(appointment._id)}>
+                        {t('appointments.startConsultation')}
+                      </Button>
+                    )}
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      loading={completingId === appointment._id}
+                      onClick={() => completeConsultation(appointment._id)}
+                    >
+                      {t('status.appointment.completed')}
+                    </Button>
+                  </div>
                 )}
               </>
             }

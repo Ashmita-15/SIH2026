@@ -6,6 +6,7 @@ import { extractFollowUps, hideTrailingMarker } from '../assistant/followUps.js'
 import { transcribeAudio } from '../assistant/transcribe.js';
 import { deriveGuidance, extractBookingHints } from '../assistant/conversationGuidance.js';
 import { triage } from '../assistant/triage.js';
+import TriageAssessment from '../models/TriageAssessment.js';
 import User from '../models/User.js';
 import { retrieveContext } from '../rag/retrieve.js';
 import { offlinePack } from '../assistant/offlineFallback.js';
@@ -180,6 +181,24 @@ export const chat = async (req, res) => {
             reasons: triageOutcome.reasons,
             referralPriority: triageOutcome.referralPriority
         });
+
+        /**
+         * Kept, so the worker who refers this patient tomorrow can see what
+         * they said today instead of asking again.
+         *
+         * Fire-and-forget and after the event is sent: the patient's answer
+         * must not wait on a write, and a failed write must not cost them the
+         * advice. patientId comes from the token — never from the body.
+         */
+        TriageAssessment.create({
+            patientId: req.user?.id,
+            level: triageOutcome.level,
+            referralPriority: triageOutcome.referralPriority || null,
+            symptoms: triageOutcome.symptoms,
+            reasons: triageOutcome.reasons,
+            durationDays: triageOutcome.durationDays ?? null,
+            pregnant: Boolean(triageOutcome.pregnant)
+        }).catch(() => {});
     }
 
     /**

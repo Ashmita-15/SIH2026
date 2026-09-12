@@ -300,7 +300,25 @@ export function doctorSessionScheduleEmail({ doctorName, facilityName, date, ses
     };
 }
 
+export function diagnosticCompletedEmail({ patientName, testName, resultSummary, facilityName }) {
+    return {
+        subject: `Your ${testName} result is ready - GramSathi`,
+        html: wrapEmail({
+            title: 'Your test result is ready',
+            bodyHtml: `
+                <p>Hello ${patientName || 'there'}, the result of your test has been recorded.</p>
+                ${infoRow('Test', testName)}
+                ${infoRow('Facility', facilityName)}
+                ${infoRow('Result', resultSummary)}
+                <p style="margin-top:14px;">You can see this in the app under <strong>My tests</strong>, and it has been added to your health record.</p>
+                <p style="color:#6b7280;">Please discuss the result with your doctor. This message is not medical advice.</p>
+            `
+        })
+    };
+}
+
 export default {
+    diagnosticCompletedEmail,
     queueFinalizedEmail,
     doctorSessionScheduleEmail,
     accountCreatedEmail,

@@ -35,6 +35,12 @@ export default function SessionPicker({ doctorId, value, onChange, error }) {
   }, [doctorId, selectedDay])
   useEffect(() => { load() }, [load])
 
+  useEffect(() => {
+    if (!value?.date && days[0]?.iso) {
+      onChange({ date: days[0].iso, sessionId: '', sessionName: '' })
+    }
+  }, [value?.date, days, onChange])
+
   const pickDay = (iso) => onChange({ date: iso, sessionId: '', sessionName: '' })
   const pick = (s) => onChange({ date: selectedDay, sessionId: s.sessionId, sessionName: s.name })
 

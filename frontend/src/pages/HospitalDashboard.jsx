@@ -425,7 +425,7 @@ function FacilityOverview() {
   if (error) return <Page title="Overview"><ErrorState message={error} /></Page>
   if (!data) return <Page title="Overview"><SkeletonList count={3} /></Page>
 
-  const { needsAttention: n, pending: p, today: td, sent, patients } = data
+  const { needsAttention: n, pending: p, today: td, sent, patients, quality: q } = data
 
   return (
     <Page
@@ -472,6 +472,67 @@ function FacilityOverview() {
           emptyText="Nothing scheduled here today."
           navigate={navigate}
         />
+
+        {/**
+          * How this facility is doing, as distinct from what it must do today.
+          *
+          * Counted from real documents only: a facility that has ordered no
+          * tests shows zero rather than being quietly omitted, and the
+          * completion rate is withheld entirely until something has actually
+          * closed — "0%" on an empty inbox would be a lie.
+          */}
+        {q && (
+          <section>
+            <p className="text-caption text-muted mb-2">📈 Quality</p>
+            <div className="flex flex-wrap gap-2 mb-3">
+              <Stat
+                label="Referral completion"
+                value={q.referralCompletionRate === null ? '—' : `${q.referralCompletionRate}%`}
+                tone={q.referralCompletionRate !== null && q.referralCompletionRate < 60 ? 'danger' : 'neutral'}
+              />
+              <Stat label={`of ${q.referralsTotal} referrals closed`} value={q.referralsClosed} />
+              <Stat label="Pending acknowledgement" value={q.referralsPending}
+                    tone={q.referralsPending ? 'warning' : 'neutral'} />
+              <Stat label="Past due (SLA)" value={q.slaBreached} tone={q.slaBreached ? 'danger' : 'neutral'} />
+              <Stat label="Overdue follow-ups" value={q.overdueFollowUps} tone={q.overdueFollowUps ? 'danger' : 'neutral'} />
+            </div>
+
+            {/* Load, not quality — but a completion rate means little without
+                knowing whether anybody was seen at all. */}
+            <p className="text-caption text-muted mb-2">Appointments &amp; queue</p>
+            <div className="flex flex-wrap gap-2 mb-3">
+              <Stat label="Appointments" value={q.appointmentsTotal} />
+              <Stat label="Pending" value={q.appointmentStatus.pending || 0} />
+              <Stat label="Confirmed" value={q.appointmentStatus.confirmed || 0} />
+              <Stat label="Completed" value={q.appointmentStatus.completed || 0} />
+              <Stat label="Cancelled" value={q.appointmentStatus.cancelled || 0} />
+              <Stat
+                label={q.sessionCapacityToday === null ? 'booked today (no clinic scheduled)' : 'seats booked today'}
+                value={q.sessionCapacityToday === null
+                  ? q.sessionBookedToday
+                  : `${q.sessionBookedToday}/${q.sessionCapacityToday}`}
+                tone={q.sessionCapacityToday !== null && q.sessionBookedToday >= q.sessionCapacityToday
+                  ? 'warning' : 'neutral'}
+              />
+              <Stat label="Queues finalised today" value={q.sessionsFinalisedToday} />
+            </div>
+
+            <p className="text-caption text-muted mb-2">Follow-up groups</p>
+            <div className="flex flex-wrap gap-2 mb-3">
+              <Stat label="Maternal" value={q.maternalPlans} />
+              <Stat label="Child" value={q.childPlans} />
+              <Stat label="Chronic" value={q.chronicPlans} />
+            </div>
+
+            <p className="text-caption text-muted mb-2">Diagnostics</p>
+            <div className="flex flex-wrap gap-2">
+              <Stat label="Requested" value={q.diagnosticStatus.requested || 0} />
+              <Stat label="Scheduled" value={q.diagnosticStatus.scheduled || 0} />
+              <Stat label="Sample taken" value={q.diagnosticStatus.sample_collected || 0} />
+              <Stat label="Completed" value={q.diagnosticStatus.completed || 0} />
+            </div>
+          </section>
+        )}
 
         {/* What we sent elsewhere — the other half of the loop, which a
             facility usually has no way of following at all. */}

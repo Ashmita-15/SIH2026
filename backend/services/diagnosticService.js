@@ -2,6 +2,8 @@ import DiagnosticRequest, { ALLOWED_NEXT, DIAGNOSTIC_PRIORITIES } from '../model
 import HealthRecord from '../models/HealthRecord.js';
 import User from '../models/User.js';
 import { mayAccessTimeline } from './timelineService.js';
+import Hospital from '../models/Hospital.js';
+import { notifyDiagnosticCompleted } from './notifications/notificationService.js';
 
 /**
  * Ordering a test, and following it until somebody has the result.
@@ -147,7 +149,12 @@ export async function updateStatus(id, input, ctx) {
     });
     await doc.save();
 
-    if (next === 'completed') await writeResultToRecord(doc, actor);
+    if (next === 'completed') {
+        await writeResultToRecord(doc, actor);
+        // Fire-and-forget: a dead mail server must not fail the status change
+        // or leave the result unrecorded.
+        notifyResult(doc).catch(() => {});
+    }
 
     return doc;
 }
@@ -172,6 +179,20 @@ async function writeResultToRecord(doc, actor) {
         facilityId: doc.facilityId || actor.hospitalId || undefined,
         diagnosticRequestId: doc._id,
         notes: [doc.testName, doc.resultSummary, doc.resultNotes].filter(Boolean).join(' — ').slice(0, 2000)
+    });
+}
+
+/** The patient learns their result is ready. Best effort, never blocking. */
+async function notifyResult(doc) {
+    const [patient, facility] = await Promise.all([
+        User.findById(doc.patientId).select('name email').lean(),
+        doc.facilityId ? Hospital.findById(doc.facilityId).select('name').lean() : null
+    ]);
+    return notifyDiagnosticCompleted({
+        patient,
+        testName: doc.testName,
+        resultSummary: doc.resultSummary,
+        facilityName: facility?.name || null
     });
 }
 
