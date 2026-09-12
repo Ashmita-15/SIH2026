@@ -545,7 +545,21 @@
     "noMedicinesHelp": "This pharmacy hasn't added any stock.",
     "fromPrescription": "Ordering from your prescription",
     "fromPrescriptionBody": "Choose a pharmacy below. We'll search for your medicines when you open it.",
-    "orderPrescription": "Order these medicines"
+    "orderPrescription": "Order these medicines",
+    "prescriptionRequired": "Prescription required",
+    "call": "Call",
+    "disclaimer": "Based on what each pharmacy last recorded. Call before travelling to be sure.",
+    "emptyAvailability": "None of the pharmacies on GramSathi stock it. Ask at the PHC before travelling.",
+    "typeThreeLetters": "Type at least three letters of a medicine name.",
+    "loadingPharmacy": "Loading pharmacy…",
+    "pharmacyNotFound": "Pharmacy not found",
+    "categories": {
+      "general": "General",
+      "prescription": "Prescription",
+      "ayurvedic": "Ayurvedic",
+      "homeopathic": "Homeopathic",
+      "vitamins": "Vitamins"
+    }
   },
   "emergency": {
     "button": "Emergency",
@@ -563,7 +577,12 @@
     "tryAgain": "Please try again.",
     "network": "Can't reach the server. Check your connection and try again.",
     "loadFailed": "We couldn't load this.",
-    "saveFailed": "We couldn't save that."
+    "saveFailed": "We couldn't save that.",
+    "notFoundTitle": "Page not found",
+    "notFoundMessage": "The page you're looking for doesn't exist or has moved.",
+    "notFoundCta": "Go to home",
+    "crashHelp": "The page ran into a problem. Reloading usually fixes it — your data is safe.",
+    "reload": "Reload the page"
   },
   "hospital": {
     "title": "Hospital",
@@ -618,7 +637,8 @@
       "pharmacy": "Manage stock, receive orders in real time, and keep customers updated from order to doorstep.",
       "hospital": "Bring your doctors and partner pharmacies together under one roof, and manage who's associated with you."
     },
-    "ctaNote": "Free to join. No card required."
+    "ctaNote": "Free to join. No card required.",
+    "eyebrow": "Rural healthcare, reimagined"
   },
   "nav": {
     "primary": "Main",
@@ -743,7 +763,32 @@
     "prescriptionAdd": "Take a photo of the prescription",
     "prescriptionAdded": "Prescription attached",
     "prescriptionReplace": "Use a different photo",
-    "prescriptionMissing": "Please add a photo of your prescription to continue."
+    "prescriptionMissing": "Please add a photo of your prescription to continue.",
+    "loadingCheckout": "Loading checkout…",
+    "loadFailed": "Unable to load checkout data",
+    "backToShop": "Back to shop",
+    "orderType": "Order type",
+    "delivery": "Home delivery",
+    "pickup": "Store pickup",
+    "collectFrom": "Collect your order from {{name}}",
+    "pickupAddress": "Pickup address",
+    "deliveryAddress": "Delivery address",
+    "fullName": "Full name",
+    "phone": "Phone number",
+    "phonePlaceholder": "10-digit mobile number",
+    "addressLine1": "Address line 1",
+    "addressLine1Placeholder": "House number, street",
+    "addressLine2": "Address line 2",
+    "city": "City or village",
+    "state": "State",
+    "pincode": "Pincode",
+    "pincodePlaceholder": "6 digits",
+    "orderSummary": "Order summary",
+    "paymentMethod": "Payment method",
+    "cod": "Cash on delivery",
+    "codHelp": "Pay when you receive your order",
+    "placeOrder": "Place order",
+    "submitting": "Placing order…"
   },
   "booking": {
     "askDoctor": "Which doctor would you like to see?",

@@ -1,4 +1,5 @@
 import React from 'react'
+import i18n from '../translations/i18n'
 
 export default class ErrorBoundary extends React.Component {
   constructor(props) {
@@ -27,12 +28,12 @@ export default class ErrorBoundary extends React.Component {
                 <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v4m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
               </svg>
             </div>
-            <h1 className="section-title mb-2">Something went wrong</h1>
+            <h1 className="section-title mb-2">{i18n.t('errors.somethingWentWrong')}</h1>
             <p className="text-body mb-6">
-              The page ran into a problem. Reloading usually fixes it — your data is safe.
+              {i18n.t('errors.crashHelp')}
             </p>
             <button type="button" onClick={() => window.location.reload()} className="btn btn-primary">
-              Reload the page
+              {i18n.t('errors.reload')}
             </button>
           </div>
         </div>

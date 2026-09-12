@@ -4,11 +4,15 @@ import { initReactI18next } from 'react-i18next';
 import translationEN from './en.json';
 import translationHI from './hi.json';
 import translationPA from './pa.json';
+import translationMR from './mr.json';
+import translationBN from './bn.json';
 
 export const LANGUAGES = [
   { code: 'en', label: 'English', native: 'English', short: 'ENG' },
   { code: 'hi', label: 'Hindi', native: 'हिन्दी', short: 'हिन्दी' },
-  { code: 'pa', label: 'Punjabi', native: 'ਪੰਜਾਬੀ', short: 'ਪੰਜਾਬੀ' }
+  { code: 'pa', label: 'Punjabi', native: 'ਪੰਜਾਬੀ', short: 'ਪੰਜਾਬੀ' },
+  { code: 'mr', label: 'Marathi', native: 'मराठी', short: 'मराठी' },
+  { code: 'bn', label: 'Bengali', native: 'বাংলা', short: 'বাংলা' }
 ];
 
 const STORAGE_KEY = 'gramsathi:lang';
@@ -20,7 +24,7 @@ function detectLanguage() {
   return LANGUAGES.some(l => l.code === browser) ? browser : 'en';
 }
 
-/** Screen readers need this to pronounce Devanagari and Gurmukhi correctly. */
+/** Screen readers need this to pronounce Devanagari, Gurmukhi, and Bengali correctly. */
 function syncDocumentLang(lng) {
   document.documentElement.setAttribute('lang', lng);
 }
@@ -31,7 +35,9 @@ i18n
     resources: {
       en: { translation: translationEN },
       hi: { translation: translationHI },
-      pa: { translation: translationPA }
+      pa: { translation: translationPA },
+      mr: { translation: translationMR },
+      bn: { translation: translationBN }
     },
     lng: detectLanguage(),
     fallbackLng: 'en',

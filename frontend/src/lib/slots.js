@@ -17,8 +17,8 @@ export function slotLabel(slot, lang = 'en') {
 function clock(hhmm, lang) {
   const [h] = hhmm.split(':').map(Number)
   const suffix = h < 12
-    ? { en: 'AM', hi: 'सुबह', pa: 'ਸਵੇਰੇ' }[lang] || 'AM'
-    : { en: 'PM', hi: 'शाम', pa: 'ਸ਼ਾਮ' }[lang] || 'PM'
+    ? { en: 'AM', hi: 'सुबह', pa: 'ਸਵੇਰੇ', mr: 'सकाळी', bn: 'সকাল' }[lang] || 'AM'
+    : { en: 'PM', hi: 'शाम', pa: 'ਸ਼ਾਮ', mr: 'संध्याकाळी', bn: 'সন্ধ্যা' }[lang] || 'PM'
   const twelve = h % 12 === 0 ? 12 : h % 12
   return lang === 'en' ? `${twelve} ${suffix}` : `${suffix} ${twelve}`
 }
@@ -44,5 +44,6 @@ export function toISODate(date) {
 export function dayLabel(day, lang, t) {
   if (day.offset === 0) return t('appointments.today')
   if (day.offset === 1) return t('appointments.tomorrow')
-  return day.date.toLocaleDateString(lang === 'en' ? 'en-IN' : lang, { weekday: 'short' })
+  const locale = lang === 'en' ? 'en-IN' : lang === 'mr' ? 'mr-IN' : lang === 'bn' ? 'bn-IN' : lang
+  return day.date.toLocaleDateString(locale, { weekday: 'short' })
 }

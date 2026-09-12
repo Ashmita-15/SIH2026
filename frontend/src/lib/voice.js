@@ -152,7 +152,7 @@ export async function transcribe(blob, lang, signal) {
 
 /* ---------------------------------------------------------------- speech out */
 
-const BCP47 = { en: 'en-IN', hi: 'hi-IN', pa: 'pa-IN' }
+const BCP47 = { en: 'en-IN', hi: 'hi-IN', pa: 'pa-IN', mr: 'mr-IN', bn: 'bn-IN' }
 
 /**
  * Device voices vary a lot: Hindi is common, Punjabi frequently missing

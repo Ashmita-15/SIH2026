@@ -6,6 +6,20 @@ export default {
   ],
   theme: {
     extend: {
+      fontFamily: {
+        sans: [
+          '"Noto Sans"',
+          '"Noto Sans Devanagari"',
+          '"Noto Sans Bengali"',
+          '"Noto Sans Gurmukhi"',
+          'system-ui',
+          '-apple-system',
+          'BlinkMacSystemFont',
+          '"Segoe UI"',
+          'Roboto',
+          'sans-serif'
+        ]
+      },
       colors: {
         // Brand — deep teal reads clinical and calm without being generic
         // medical blue, and leaves green/amber/red free for status.

@@ -1,5 +1,6 @@
 import React, { Suspense, lazy, useEffect, useState } from 'react'
 import { Routes, Route, Navigate, useLocation, useParams, Link } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 import Navbar from './components/Navbar.jsx'
 import AppShell from './components/app/AppShell.jsx'
 import EmergencyButton from './components/EmergencyButton.jsx'
@@ -21,6 +22,7 @@ const PharmacyDashboard = lazy(() => import('./pages/PharmacyDashboard.jsx'))
 const HealthWorkerDashboard = lazy(() => import('./pages/HealthWorkerDashboard.jsx'))
 
 function NotFound() {
+  const { t } = useTranslation()
   return (
     <div className="container-app py-16">
       <div className="card max-w-lg mx-auto">
@@ -31,11 +33,11 @@ function NotFound() {
                 <circle cx="11" cy="11" r="7" /><path strokeLinecap="round" d="M20 20l-3.5-3.5" />
               </svg>
             </div>
-            <h1 className="card-title mb-1.5">Page not found</h1>
+            <h1 className="card-title mb-1.5">{t('errors.notFoundTitle')}</h1>
             <p className="text-small text-muted max-w-sm mx-auto mb-5">
-              The page you're looking for doesn't exist or has moved.
+              {t('errors.notFoundMessage')}
             </p>
-            <Link to="/" className="btn btn-primary">Go to home</Link>
+            <Link to="/" className="btn btn-primary">{t('errors.notFoundCta')}</Link>
           </div>
         </div>
       </div>

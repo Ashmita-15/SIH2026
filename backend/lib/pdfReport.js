@@ -32,6 +32,10 @@ const FONTS = {
     gurmukhi: {
         regular: fontDir('noto-serif-gurmukhi', 'noto-serif-gurmukhi-gurmukhi-400-normal.woff'),
         bold: fontDir('noto-serif-gurmukhi', 'noto-serif-gurmukhi-gurmukhi-700-normal.woff')
+    },
+    bengali: {
+        regular: fontDir('noto-sans-bengali', 'noto-sans-bengali-bengali-400-normal.woff'),
+        bold: fontDir('noto-sans-bengali', 'noto-sans-bengali-bengali-700-normal.woff')
     }
 };
 
@@ -51,12 +55,14 @@ const PAGE = { margin: 48, width: 595.28, height: 841.89 };
  */
 const hasDevanagari = (text) => /[\u0900-\u0963\u0966-\u097F]/.test(text || '');
 const hasGurmukhi = (text) => /[\u0A00-\u0A7F]/.test(text || '');
+const hasBengali = (text) => /[\u0980-\u09FF]/.test(text || '');
 
 /** Registers whichever scripts this document actually needs. */
 function registerFonts(doc, sample) {
     const wanted = ['latin'];
     if (hasDevanagari(sample)) wanted.push('devanagari');
     if (hasGurmukhi(sample)) wanted.push('gurmukhi');
+    if (hasBengali(sample)) wanted.push('bengali');
 
     const registered = [];
     for (const script of wanted) {
@@ -80,6 +86,7 @@ function registerFonts(doc, sample) {
  * Latin too, so choosing by the non-Latin script keeps the whole line intact.
  */
 function fontFor(text, weight, available) {
+    if (hasBengali(text) && available.includes('bengali')) return `bengali-${weight}`;
     if (hasGurmukhi(text) && available.includes('gurmukhi')) return `gurmukhi-${weight}`;
     if (hasDevanagari(text) && available.includes('devanagari')) return `devanagari-${weight}`;
     return `latin-${weight}`;
@@ -117,6 +124,7 @@ function splitByScript(text, available) {
 const NEUTRAL = /[\s\u0964\u0965]/;
 
 function scriptOf(char, available) {
+    if (hasBengali(char) && available.includes('bengali')) return 'bengali';
     if (hasGurmukhi(char) && available.includes('gurmukhi')) return 'gurmukhi';
     if (hasDevanagari(char) && available.includes('devanagari')) return 'devanagari';
     return 'latin';

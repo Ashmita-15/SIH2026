@@ -171,9 +171,9 @@ export default function CheckoutPage() {
 
   if (loading) {
     return (
-      <PageLayout title="Checkout">
+      <PageLayout title={t('checkout.orderSummary', 'Checkout')}>
         <div className="flex justify-center items-center h-64">
-          <div className="text-lg">Loading checkout...</div>
+          <div className="text-lg">{t('checkout.loadingCheckout', 'Loading checkout...')}</div>
         </div>
       </PageLayout>
     )
@@ -181,14 +181,14 @@ export default function CheckoutPage() {
 
   if (!cart || !pharmacy) {
     return (
-      <PageLayout title="Checkout">
+      <PageLayout title={t('checkout.orderSummary', 'Checkout')}>
         <div className="text-center py-12">
-          <div className="text-muted text-lg">Unable to load checkout data</div>
+          <div className="text-muted text-lg">{t('checkout.loadFailed', 'Unable to load checkout data')}</div>
           <button 
             onClick={() => navigate(`/patient/medicine/${pharmacyId}`)}
             className="btn btn-primary mt-4"
           >
-            Back to Shop
+            {t('checkout.backToShop', 'Back to Shop')}
           </button>
         </div>
       </PageLayout>
@@ -196,7 +196,7 @@ export default function CheckoutPage() {
   }
 
   return (
-    <PageLayout title={`Checkout - ${pharmacy.name}`}>
+    <PageLayout title={`${t('checkout.orderSummary', 'Checkout')} - ${pharmacy.name}`}>
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         
         {/* Main Checkout Form */}
@@ -205,7 +205,7 @@ export default function CheckoutPage() {
           {/* Order Type Selection */}
           <div className="card">
             <div className="card-body">
-              <h3 className="section-title mb-4">Order Type</h3>
+              <h3 className="section-title mb-4">{t('checkout.orderType', 'Order Type')}</h3>
               <div className="space-y-3">
                 {pharmacy.deliveryAvailable && (
                   <label className="flex items-center space-x-3 cursor-pointer">
@@ -218,9 +218,9 @@ export default function CheckoutPage() {
                       className="w-4 h-4 text-info-600"
                     />
                     <div>
-                      <div className="font-medium">Home Delivery</div>
+                      <div className="font-medium">{t('checkout.delivery', 'Home Delivery')}</div>
                       <div className="text-small text-muted">
-                        Get medicines delivered to your address
+                        {t('pharmacy.subtitle', 'Get medicines delivered to your address')}
                         {calculateDeliveryFee() > 0 && (
                           <span className="text-warning-600"> (+₹{calculateDeliveryFee()} delivery fee)</span>
                         )}
@@ -239,9 +239,9 @@ export default function CheckoutPage() {
                     className="w-4 h-4 text-info-600"
                   />
                   <div>
-                    <div className="font-medium">Store Pickup</div>
+                    <div className="font-medium">{t('checkout.pickup', 'Store Pickup')}</div>
                     <div className="text-small text-muted">
-                      Collect your order from {pharmacy.name}
+                      {t('checkout.collectFrom', { name: pharmacy.name })}
                     </div>
                   </div>
                 </label>
@@ -249,7 +249,7 @@ export default function CheckoutPage() {
               
               {orderType === 'pickup' && (
                 <div className="mt-4 p-3 bg-info-50 rounded-lg">
-                  <div className="text-small font-medium text-info-600 mb-1">Pickup Address:</div>
+                  <div className="text-small font-medium text-info-600 mb-1">{t('checkout.pickupAddress')}:</div>
                   <div className="text-small text-info-600">
                     {pharmacy.address || pharmacy.location}<br/>
                     📞 {pharmacy.contact}<br/>
@@ -264,35 +264,35 @@ export default function CheckoutPage() {
           {orderType === 'delivery' && (
             <div className="card">
               <div className="card-body">
-                <h3 className="section-title mb-4">Delivery Address</h3>
+                <h3 className="section-title mb-4">{t('checkout.deliveryAddress')}</h3>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <Field label="Full name" error={addressErrors.name} required>
+                  <Field label={t('checkout.fullName', 'Full name')} error={addressErrors.name} required>
                     {(props) => (
                       <Input {...props} autoComplete="name" error={addressErrors.name}
                         value={deliveryAddress.name}
                         onChange={e => { setDeliveryAddress({...deliveryAddress, name: e.target.value}); clearAddressError('name') }} />
                     )}
                   </Field>
-                  <Field label="Phone number" error={addressErrors.phone} required>
+                  <Field label={t('checkout.phone', 'Phone number')} error={addressErrors.phone} required>
                     {(props) => (
                       <Input {...props} type="tel" inputMode="tel" autoComplete="tel" error={addressErrors.phone}
-                        placeholder="10-digit mobile number"
+                        placeholder={t('checkout.phonePlaceholder', '10-digit mobile number')}
                         value={deliveryAddress.phone}
                         onChange={e => { setDeliveryAddress({...deliveryAddress, phone: e.target.value}); clearAddressError('phone') }} />
                     )}
                   </Field>
                   <div className="md:col-span-2">
-                    <Field label="Address line 1" error={addressErrors.addressLine1} required>
+                    <Field label={t('checkout.addressLine1', 'Address line 1')} error={addressErrors.addressLine1} required>
                       {(props) => (
                         <Input {...props} autoComplete="address-line1" error={addressErrors.addressLine1}
-                          placeholder="House number, street"
+                          placeholder={t('checkout.addressLine1Placeholder', 'House number, street')}
                           value={deliveryAddress.addressLine1}
                           onChange={e => { setDeliveryAddress({...deliveryAddress, addressLine1: e.target.value}); clearAddressError('addressLine1') }} />
                       )}
                     </Field>
                   </div>
                   <div className="md:col-span-2">
-                    <Field label="Address line 2" hint="Optional">
+                    <Field label={t('checkout.addressLine2', 'Address line 2')} hint={t('common.optional', 'Optional')}>
                       {(props) => (
                         <Input {...props} autoComplete="address-line2"
                           value={deliveryAddress.addressLine2}
@@ -300,29 +300,29 @@ export default function CheckoutPage() {
                       )}
                     </Field>
                   </div>
-                  <Field label="City or village" error={addressErrors.city} required>
+                  <Field label={t('checkout.city', 'City or village')} error={addressErrors.city} required>
                     {(props) => (
                       <Input {...props} autoComplete="address-level2" error={addressErrors.city}
                         value={deliveryAddress.city}
                         onChange={e => { setDeliveryAddress({...deliveryAddress, city: e.target.value}); clearAddressError('city') }} />
                     )}
                   </Field>
-                  <Field label="State" error={addressErrors.state} required>
+                  <Field label={t('checkout.state', 'State')} error={addressErrors.state} required>
                     {(props) => (
                       <Input {...props} autoComplete="address-level1" error={addressErrors.state}
                         value={deliveryAddress.state}
                         onChange={e => { setDeliveryAddress({...deliveryAddress, state: e.target.value}); clearAddressError('state') }} />
                     )}
                   </Field>
-                  <Field label="Pincode" error={addressErrors.pincode} required>
+                  <Field label={t('checkout.pincode', 'Pincode')} error={addressErrors.pincode} required>
                     {(props) => (
                       <Input {...props} inputMode="numeric" maxLength="6" autoComplete="postal-code" error={addressErrors.pincode}
-                        placeholder="6 digits"
+                        placeholder={t('checkout.pincodePlaceholder', '6 digits')}
                         value={deliveryAddress.pincode}
                         onChange={e => { setDeliveryAddress({...deliveryAddress, pincode: e.target.value}); clearAddressError('pincode') }} />
                     )}
                   </Field>
-                  <Field label="Landmark" hint="Optional">
+                  <Field label={t('common.name', 'Landmark')} hint={t('common.optional', 'Optional')}>
                     {(props) => (
                       <Input {...props} placeholder="Near the school, temple…"
                         value={deliveryAddress.landmark}
@@ -410,7 +410,7 @@ export default function CheckoutPage() {
           {/* Order Items */}
           <div className="card">
             <div className="card-body">
-              <h3 className="section-title mb-4">Order Summary</h3>
+              <h3 className="section-title mb-4">{t('checkout.orderSummary')}</h3>
               <div className="space-y-3">
                 {cart.items.map(item => (
                   <div key={item.medicineId._id} className="flex justify-between items-start">
@@ -420,7 +420,7 @@ export default function CheckoutPage() {
                         {item.medicineId.brand && `${item.medicineId.brand} • `}
                         Qty: {item.quantity}
                         {item.medicineId.prescriptionRequired && (
-                          <span className="text-info-600 font-medium"> • Rx Required</span>
+                          <span className="text-info-600 font-medium"> • {t('pharmacy.prescriptionRequired')}</span>
                         )}
                       </div>
                     </div>
@@ -431,19 +431,19 @@ export default function CheckoutPage() {
 
               <div className="border-t pt-4 mt-4 space-y-2">
                 <div className="flex justify-between">
-                  <span>Subtotal:</span>
+                  <span>{t('pharmacy.total')}:</span>
                   <span>₹{cart.totalAmount}</span>
                 </div>
                 
                 <div className="flex justify-between">
-                  <span>Delivery Fee:</span>
+                  <span>{t('checkout.delivery')}:</span>
                   <span>
                     {calculateDeliveryFee() === 0 ? 'FREE' : `₹${calculateDeliveryFee()}`}
                   </span>
                 </div>
                 
                 <div className="flex justify-between font-semibold text-lg border-t pt-2">
-                  <span>Total:</span>
+                  <span>{t('pharmacy.total')}:</span>
                   <span>₹{getFinalTotal()}</span>
                 </div>
               </div>
@@ -453,7 +453,7 @@ export default function CheckoutPage() {
           {/* Payment Method */}
           <div className="card">
             <div className="card-body">
-              <h3 className="section-title mb-4">Payment Method</h3>
+              <h3 className="section-title mb-4">{t('checkout.paymentMethod')}</h3>
               <div className="space-y-3">
                 <label className="flex items-center space-x-3">
                   <input
@@ -464,8 +464,8 @@ export default function CheckoutPage() {
                     className="w-4 h-4 text-info-600"
                   />
                   <div>
-                    <div className="font-medium">Cash on Delivery</div>
-                    <div className="text-small text-muted">Pay when you receive your order</div>
+                    <div className="font-medium">{t('checkout.cod')}</div>
+                    <div className="text-small text-muted">{t('checkout.codHelp')}</div>
                   </div>
                 </label>
               </div>
@@ -478,7 +478,7 @@ export default function CheckoutPage() {
             disabled={submitting}
             className={`btn btn-primary w-full text-lg py-3 ${submitting ? 'opacity-50 cursor-not-allowed' : ''}`}
           >
-            {submitting ? 'Placing Order...' : `Place Order - ₹${getFinalTotal()}`}
+            {submitting ? t('checkout.submitting') : `${t('checkout.placeOrder')} - ₹${getFinalTotal()}`}
           </button>
 
           {/* Back to Shop */}
@@ -486,7 +486,7 @@ export default function CheckoutPage() {
             onClick={() => navigate(`/patient/medicine/${pharmacyId}`)}
             className="btn btn-secondary w-full"
           >
-            ← Back to Shop
+            ← {t('checkout.backToShop')}
           </button>
         </div>
       </div>

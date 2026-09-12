@@ -1,4 +1,5 @@
 import React, { useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import api, { friendlyError } from '../../services/api'
 import { Button, Card, CardBody, Field, Input, Badge, Loading, EmptyState } from '../ui'
 
@@ -12,7 +13,6 @@ import { Button, Card, CardBody, Field, Input, Badge, Loading, EmptyState } from
  */
 
 const TONE = { available: 'success', low_stock: 'warning', unavailable: 'danger' }
-const LABEL = { available: 'Available', low_stock: 'Low stock', unavailable: 'Not in stock' }
 const MARK = { available: '✔', low_stock: '⚠', unavailable: '✖' }
 
 /**
@@ -42,15 +42,25 @@ export function guessMedicines(prescription) {
 }
 
 export default function MedicineAvailability({ initialMedicines = [], compact = false }) {
+  const { t } = useTranslation()
   const [query, setQuery] = useState(initialMedicines.join(', '))
   const [items, setItems] = useState(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
 
+  const getAvailabilityLabel = (availability) => {
+    switch (availability) {
+      case 'available': return t('pharmacy.inStock', 'Available')
+      case 'low_stock': return t('pharmacy.lowStock', 'Low stock')
+      case 'unavailable': return t('pharmacy.outOfStock', 'Not in stock')
+      default: return availability
+    }
+  }
+
   const search = async (e) => {
     e?.preventDefault()
     const terms = query.split(',').map(t => t.trim()).filter(t => t.length >= 3)
-    if (!terms.length) { setError('Type at least three letters of a medicine name.'); return }
+    if (!terms.length) { setError(t('pharmacy.typeThreeLetters', 'Type at least three letters of a medicine name.')); return }
 
     setError(''); setBusy(true)
     try {
@@ -67,13 +77,13 @@ export default function MedicineAvailability({ initialMedicines = [], compact = 
     <div className="space-y-4">
       <form onSubmit={search} className="flex items-end gap-2">
         <div className="flex-1">
-          <Field label="Medicines" hint="Separate several with commas.">
+          <Field label={t('pharmacy.medicines', 'Medicines')} hint="Separate several with commas.">
             {(p) => <Input {...p} value={query} onChange={(e) => setQuery(e.target.value)}
                            placeholder="Paracetamol, Metformin" />}
           </Field>
         </div>
         <Button type="submit" disabled={busy} className="mb-[2px]">
-          {busy ? 'Checking…' : 'Check'}
+          {busy ? t('common.loading', 'Checking…') : t('common.search', 'Check')}
         </Button>
       </form>
 
@@ -85,14 +95,14 @@ export default function MedicineAvailability({ initialMedicines = [], compact = 
           <div className="flex items-center gap-2 mb-2">
             <p className="text-small font-medium text-ink">{item.query}</p>
             <Badge tone={item.anyAvailable ? 'success' : 'danger'}>
-              {item.anyAvailable ? 'Available nearby' : 'Not available nearby'}
+              {item.anyAvailable ? t('pharmacy.inStock', 'Available nearby') : t('pharmacy.outOfStock', 'Not available nearby')}
             </Badge>
           </div>
 
           {item.results.length === 0 ? (
             <EmptyState
-              title="No pharmacy lists this"
-              message="None of the pharmacies on GramSathi stock it. Ask at the PHC before travelling."
+              title={t('pharmacy.empty', 'No pharmacies found')}
+              message={t('pharmacy.emptyAvailability', 'None of the pharmacies on GramSathi stock it. Ask at the PHC before travelling.')}
             />
           ) : (
             <div className="grid gap-2">
@@ -107,14 +117,14 @@ export default function MedicineAvailability({ initialMedicines = [], compact = 
                         {[r.pharmacy?.location, r.medicineName, r.dosage].filter(Boolean).join(' · ')}
                       </p>
                       {r.prescriptionRequired && (
-                        <p className="text-caption text-muted mt-0.5">Prescription required</p>
+                        <p className="text-caption text-muted mt-0.5">{t('pharmacy.prescriptionRequired', 'Prescription required')}</p>
                       )}
                     </div>
                     <div className="flex items-center gap-2 shrink-0">
                       {r.price ? <span className="text-small text-body tabular">₹{r.price}</span> : null}
-                      <Badge tone={TONE[r.availability]}>{LABEL[r.availability]}</Badge>
+                      <Badge tone={TONE[r.availability]}>{getAvailabilityLabel(r.availability)}</Badge>
                       {r.pharmacy?.contact && (
-                        <a href={`tel:${r.pharmacy.contact}`} className="btn btn-secondary btn-sm">Call</a>
+                        <a href={`tel:${r.pharmacy.contact}`} className="btn btn-secondary btn-sm">{t('pharmacy.call', 'Call')}</a>
                       )}
                     </div>
                   </CardBody>
@@ -129,7 +139,7 @@ export default function MedicineAvailability({ initialMedicines = [], compact = 
           fare deserves to know this is a guide and not a guarantee. */}
       {items?.length > 0 && (
         <p className="text-caption text-muted">
-          Based on what each pharmacy last recorded. Call before travelling to be sure.
+          {t('pharmacy.disclaimer', 'Based on what each pharmacy last recorded. Call before travelling to be sure.')}
         </p>
       )}
     </div>

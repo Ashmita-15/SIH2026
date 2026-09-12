@@ -41,7 +41,9 @@ const TIMES = ['morning', 'afternoon', 'evening', 'night', 'today', 'tomorrow', 
 const TIME_LABEL = {
     en: { morning: 'in the morning', afternoon: 'in the afternoon', evening: 'in the evening', night: 'at night', today: 'today', tomorrow: 'tomorrow', soon: 'as soon as possible' },
     hi: { morning: 'सुबह', afternoon: 'दोपहर', evening: 'शाम को', night: 'रात को', today: 'आज', tomorrow: 'कल', soon: 'जल्दी' },
-    pa: { morning: 'ਸਵੇਰੇ', afternoon: 'ਦੁਪਹਿਰੇ', evening: 'ਸ਼ਾਮੀਂ', night: 'ਰਾਤੀਂ', today: 'ਅੱਜ', tomorrow: 'ਭਲਕੇ', soon: 'ਜਲਦੀ' }
+    pa: { morning: 'ਸਵੇਰੇ', afternoon: 'ਦੁਪਹਿਰੇ', evening: 'ਸ਼ਾਮੀਂ', night: 'ਰਾਤੀਂ', today: 'ਅੱਜ', tomorrow: 'ਭਲਕੇ', soon: 'ਜਲਦੀ' },
+    mr: { morning: 'सकाळी', afternoon: 'दुपारी', evening: 'संध्याकाळी', night: 'रात्री', today: 'आज', tomorrow: 'उद्या', soon: 'लवकरात लवकर' },
+    bn: { morning: 'সকালে', afternoon: 'দুপুরে', evening: 'সন্ধ্যায়', night: 'রাতে', today: 'আজ', tomorrow: 'আগামীকাল', soon: 'যত তাড়াতাড়ি সম্ভব' }
 };
 
 /**
@@ -53,20 +55,26 @@ const TIME_LABEL = {
 const ASK_TIME = {
     en: 'Alright, I can help you find a doctor. When would you like to speak to a doctor?',
     hi: 'ठीक है, मैं डॉक्टर ढूँढने में आपकी मदद करता हूँ। आप डॉक्टर से कब बात करना चाहेंगे?',
-    pa: 'ਠੀਕ ਹੈ, ਮੈਂ ਡਾਕਟਰ ਲੱਭਣ ਵਿੱਚ ਤੁਹਾਡੀ ਮਦਦ ਕਰਦਾ ਹਾਂ। ਤੁਸੀਂ ਡਾਕਟਰ ਨਾਲ ਕਦੋਂ ਗੱਲ ਕਰਨੀ ਚਾਹੋਗੇ?'
+    pa: 'ਠੀਕ ਹੈ, ਮੈਂ ਡਾਕਟਰ ਲੱਭਣ ਵਿੱਚ ਤੁਹਾਡੀ ਮਦਦ ਕਰਦਾ ਹਾਂ। ਤੁਸੀਂ ਡਾਕਟਰ ਨਾਲ ਕਦੋਂ ਗੱਲ ਕਰਨੀ ਚਾਹੋਗੇ?',
+    mr: 'ठीक आहे, मी तुम्हाला डॉक्टर शोधण्यात मदत करू शकतो. तुम्ही डॉक्टरांशी कधी बोलू इच्छिता?',
+    bn: 'ঠিক আছে, আমি আপনাকে ডাক্তার খুঁজে পেতে সাহায্য করতে পারি। আপনি কখন ডাক্তারের সাথে কথা বলতে চান?'
 };
 
 /** Tap targets for the question above — faster than saying it, for anyone who can tap. */
 const TIME_CHOICES = {
     en: ['In the morning', 'In the evening', 'As soon as possible'],
     hi: ['सुबह', 'शाम को', 'जितनी जल्दी हो सके'],
-    pa: ['ਸਵੇਰੇ', 'ਸ਼ਾਮੀਂ', 'ਜਿੰਨੀ ਛੇਤੀ ਹੋ ਸਕੇ']
+    pa: ['ਸਵੇਰੇ', 'ਸ਼ਾਮੀਂ', 'ਜਿੰਨੀ ਛੇਤੀ ਹੋ ਸਕੇ'],
+    mr: ['सकाळी', 'संध्याकाळी', 'लवकरात लवकर'],
+    bn: ['সকালে', 'সন্ধ্যায়', 'যত তাড়াতাড়ি সম্ভব']
 };
 
 const CANCELLED = {
     en: 'No problem. I have not booked anything. Tell me whenever you need help.',
     hi: 'कोई बात नहीं। मैंने कुछ भी बुक नहीं किया है। जब भी ज़रूरत हो, मुझे बताइए।',
-    pa: 'ਕੋਈ ਗੱਲ ਨਹੀਂ। ਮੈਂ ਕੁਝ ਵੀ ਬੁੱਕ ਨਹੀਂ ਕੀਤਾ। ਜਦੋਂ ਵੀ ਲੋੜ ਹੋਵੇ, ਮੈਨੂੰ ਦੱਸੋ।'
+    pa: 'ਕੋਈ ਗੱਲ ਨਹੀਂ। ਮੈਂ ਕੁਝ ਵੀ ਬੁੱਕ ਨਹੀਂ ਕੀਤਾ। ਜਦੋਂ ਵੀ ਲੋੜ ਹੋਵੇ, ਮੈਨੂੰ ਦੱਸੋ।',
+    mr: 'काही अडचण नाही. मी काहीही बुक केलेले नाही. जेव्हा गरज असेल तेव्हा मला सांगा.',
+    bn: 'কোনো সমস্যা নেই। আমি কিছু বুক করিনি। যখনই সাহায্যের প্রয়োজন হবে, আমাকে জানাবেন।'
 };
 
 /**
@@ -93,6 +101,20 @@ function summarise({ lang, symptoms, time }) {
         if (label) parts.push(`और आप ${label} डॉक्टर से बात करना चाहते हैं`);
         const recap = parts.length ? `ठीक है। ${parts.join(' ')}। ` : 'ठीक है। ';
         return `${recap}मैं आपके लिए डॉक्टरों की सूची खोल रहा हूँ। आप किस डॉक्टर को चुनना चाहेंगे?`;
+    }
+        if (lang === 'mr') {
+        const parts = [];
+        if (said) parts.push(`तुम्ही सांगितले की तुम्हाला ${said} चा त्रास आहे`);
+        if (label) parts.push(`आणि तुम्ही ${label} डॉक्टरांशी बोलू इच्छिता`);
+        const recap = parts.length ? `ठीक आहे. ${parts.join(' ')}. ` : 'ठीक आहे. ';
+        return `${recap}मी तुमच्यासाठी डॉक्टरांची यादी उघडत आहे. तुम्ही कोणत्या डॉक्टरांना भेटू इच्छिता?`;
+    }
+    if (lang === 'bn') {
+        const parts = [];
+        if (said) parts.push(`আপনি জানিয়েছেন আপনার ${said} রয়েছে`);
+        if (label) parts.push(`এবং আপনি ${label} ডাক্তারের সাথে কথা বলতে চান`);
+        const recap = parts.length ? `ঠিক আছে। ${parts.join(' ')}। ` : 'ঠিক আছে। ';
+        return `${recap}আমি আপনার জন্য ডাক্তারদের তালিকা খুলছি। আপনি কোন ডাক্তারকে দেখাতে চান?`;
     }
     if (lang === 'pa') {
         const parts = [];
@@ -136,7 +158,7 @@ Return ONLY a JSON object, no code fence, exactly this shape:
   "सुबह"/"subah" -> morning. "दोपहर"/"dopahar" -> afternoon. "शाम"/"shaam"/"ਸ਼ਾਮ" -> evening. Otherwise null.
 
 Rules:
-- People speak Hindi, Punjabi and English, often mixed and often in Latin letters. Judge meaning, not spelling.
+- People speak Hindi, Punjabi, Marathi, Bengali and English, often mixed and often in Latin letters. Judge meaning, not spelling.
 - Report only what the patient actually said. Never fill a field to be helpful.
 - Never return an id, a route, a path, a date in any format, a time range, code, or any explanation.
 - Return ONLY the JSON object.`;
@@ -190,11 +212,15 @@ export async function extractBookingHints({ messages = [], lang = 'en', signal }
  */
 const CANCEL_WORDS = ['nahi', 'nahin', 'nai', 'rehne do', 'rahne do', 'nahi chahiye', 'cancel', 'stop', 'no', 'nope',
     'नहीं', 'नही', 'रहने दो', 'नहीं चाहिए', 'बंद करो',
-    'ਨਹੀਂ', 'ਨਹੀ', 'ਰਹਿਣ ਦਿਓ', 'ਬੰਦ ਕਰੋ'];
+    'ਨਹੀਂ', 'ਨਹੀ', 'ਰਹਿਣ ਦਿਓ', 'ਬੰਦ ਕਰੋ',
+    'नाही', 'नको', 'रद्द करा', 'थांबा', 'नको आहे', 'बंद करा',
+    'না', 'নয়', 'বাতিল', 'থাক', 'দরকার নেই', 'বন্ধ করুন'];
 
 const AFFIRM_WORDS = ['haan', 'han', 'ha', 'ji', 'ji haan', 'theek hai', 'thik hai', 'ok', 'okay', 'yes', 'yeah', 'yep', 'sure',
     'हाँ', 'हां', 'जी', 'जी हाँ', 'ठीक है', 'बिल्कुल',
-    'ਹਾਂ', 'ਜੀ', 'ਠੀਕ ਹੈ', 'ਬਿਲਕੁਲ'];
+    'ਹਾਂ', 'ਜੀ', 'ਠੀਕ ਹੈ', 'ਬਿਲਕੁਲ',
+    'हो', 'होय', 'नक्की', 'हो करा',
+    'হ্যাঁ', 'হ্যা', 'ঠিক আছে', 'অবশ্যই', 'করুন'];
 
 const strip = (s) => String(s || '').toLowerCase().replace(/[.!?,।]/g, ' ').replace(/\s+/g, ' ').trim();
 
@@ -234,7 +260,7 @@ preferredTime: one of "morning","afternoon","evening","night","today","tomorrow"
 specialization: a medical speciality only if the patient explicitly named one, else null.
 
 Rules:
-- People speak Hindi, Punjabi and English, often mixed, and often written in Latin letters. Judge meaning, not spelling.
+- People speak Hindi, Punjabi, Marathi, Bengali and English, often mixed, and often written in Latin letters. Judge meaning, not spelling.
 - Judge the goal from the patient's MOST RECENT message. Earlier messages are context only.
 - Carry forward symptoms and preferredTime from earlier turns ONLY if the current goal is still FIND_DOCTOR.
 - Describing a problem alone is GENERAL_CARE_GUIDANCE. "I have fever" is GENERAL_CARE_GUIDANCE.
