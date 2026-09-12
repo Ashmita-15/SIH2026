@@ -28,6 +28,7 @@ import symptomCheckerRoutes from './routes/symptomCheckerRoutes.js';
 import userRoutes from './routes/userRoutes.js';
 import notificationRoutes from './routes/notificationRoutes.js';
 import { handleRazorpayWebhook } from './controllers/pharmacyController.js';
+import emergencyRoutes from './routes/emergencyRoutes.js';
 
 dotenv.config();
 
@@ -105,6 +106,7 @@ app.use('/api/tasks', taskRoutes);
 app.use('/api/symptom-checker', symptomCheckerRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/notifications', notificationRoutes);
+app.use('/api/emergency', emergencyRoutes);
 
 // Razorpay Webhook endpoint alias
 app.post('/api/payments/razorpay/webhook', handleRazorpayWebhook);

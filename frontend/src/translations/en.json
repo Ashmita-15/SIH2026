@@ -570,6 +570,20 @@
     "button": "Emergency",
     "title": "Get help now",
     "description": "Tap a number to call. These are free national helplines.",
+    "alertHospital": {
+      "title": "Alert Nearest Hospital",
+      "subtitle": "Send your live location to the closest hospital so they can reach you.",
+      "send": "Send My Location Now",
+      "locating": "Finding your location…",
+      "sending": "Alerting nearest hospital…",
+      "success": "Alert sent!",
+      "successDetail": "{{hospital}} ({{distance}} km away) has been notified with your location.",
+      "error": "Could not send the alert. Please try calling a helpline below.",
+      "retry": "Try again",
+      "denied": "Location permission denied. Please allow location access and try again.",
+      "unavailable": "Location is not available on this device. Please call a helpline below."
+    },
+    "orCall": "or call a helpline",
     "services": {
       "ambulance": "Ambulance",
       "emergency": "Police, fire or ambulance",
