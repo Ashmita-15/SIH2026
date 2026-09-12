@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useCallback, useMemo, useEffect } from 'react'
 import { clearAllUserData } from '../lib/offline/db.js'
+import { handleLogoutPushCleanup } from '../lib/pushNotifications.js'
 
 const AuthContext = createContext(null)
 
@@ -37,6 +38,8 @@ export function AuthProvider({ children }) {
     if (currentUserId) {
       clearAllUserData(currentUserId).catch(err => console.error('[Auth] Error clearing user data:', err))
     }
+    // Clean up push subscription association for shared devices
+    handleLogoutPushCleanup().catch(err => console.debug('[Auth] Push cleanup on logout:', err))
     localStorage.removeItem(TOKEN_KEY)
     localStorage.removeItem(USER_KEY)
     sessionStorage.clear()

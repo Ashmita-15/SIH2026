@@ -6,6 +6,7 @@ import { navFor, homePathFor } from '../../config/navigation'
 import { LANGUAGES } from '../../translations/i18n'
 import Dropdown, { DropdownItem } from '../ui/Dropdown'
 import Avatar from '../ui/Avatar'
+import NotificationBell from '../notifications/NotificationBell.jsx'
 import logo from '../../assets/images/logo.png'
 
 const Icon = ({ d, className = 'w-5 h-5' }) => (
@@ -80,10 +81,13 @@ export default function AppShell({ badges = {}, children }) {
 
       {/* ───────── Desktop sidebar ───────── */}
       <aside className="hidden lg:flex flex-col sticky top-0 h-screen bg-surface border-r border-line">
-        <Link to="/" className="flex items-center gap-2.5 px-5 h-16 shrink-0 border-b border-line rounded-control">
-          <img src={logo} alt="GramSathi Logo" className="w-8 h-8 object-contain rounded-lg shrink-0" />
-          <span className="font-semibold text-ink tracking-tight">GramSathi</span>
-        </Link>
+        <div className="flex items-center justify-between px-5 h-16 shrink-0 border-b border-line">
+          <Link to="/" className="flex items-center gap-2.5 rounded-control">
+            <img src={logo} alt="GramSathi Logo" className="w-8 h-8 object-contain rounded-lg shrink-0" />
+            <span className="font-semibold text-ink tracking-tight">GramSathi</span>
+          </Link>
+          <NotificationBell />
+        </div>
 
         <nav className="flex-1 p-3 space-y-1 overflow-y-auto" aria-label={t('nav.primary')}>
           {items.map(item => (
@@ -148,8 +152,10 @@ export default function AppShell({ badges = {}, children }) {
               <span className="font-semibold text-ink text-small tracking-tight">GramSathi</span>
             </Link>
 
-            <Dropdown
-              label={t('navbar.account')}
+            <div className="flex items-center gap-1.5">
+              <NotificationBell />
+              <Dropdown
+                label={t('navbar.account')}
               trigger={({ toggle, ...aria }) => (
                 <button
                   type="button"
@@ -167,6 +173,7 @@ export default function AppShell({ badges = {}, children }) {
             >
               {accountMenu}
             </Dropdown>
+            </div>
           </div>
         </header>
 

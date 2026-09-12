@@ -4,6 +4,7 @@ import { findAvailability } from '../services/availabilityService.js';
 import { sendError } from '../services/errors.js';
 import Cart from '../models/Cart.js';
 import Order from '../models/Order.js';
+import { notifyPharmacyNewOrder, notifyPharmacyOrderStatus } from '../services/notifications/notificationService.js';
 
 // Pharmacy Management
 /**
@@ -572,11 +573,12 @@ export const createOrder = async (req, res) => {
         // Populate order for response
         await order.populate([
             { path: 'userId', select: 'name email phone' },
-            { path: 'pharmacyId', select: 'name location contact' }
+            { path: 'pharmacyId', select: 'name location contact ownerId' }
         ]);
         
         // Emit new order to pharmacy
         req.io.to(`pharmacy_${pharmacyId}`).emit('new-order', order);
+        notifyPharmacyNewOrder({ order, pharmacyOwnerId: order.pharmacyId?.ownerId }).catch(() => {});
         
         res.status(201).json(order);
     } catch (e) {
@@ -672,6 +674,9 @@ export const updateOrderStatus = async (req, res) => {
             status,
             note
         });
+        
+        // Push notification to patient
+        notifyPharmacyOrderStatus({ order, status, note }).catch(() => {});
         
         res.json(order);
     } catch (e) {

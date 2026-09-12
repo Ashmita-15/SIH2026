@@ -25,6 +25,7 @@ import referralRoutes from './routes/referralRoutes.js';
 import taskRoutes from './routes/taskRoutes.js';
 import symptomCheckerRoutes from './routes/symptomCheckerRoutes.js';
 import userRoutes from './routes/userRoutes.js';
+import notificationRoutes from './routes/notificationRoutes.js';
 
 dotenv.config();
 
@@ -95,6 +96,7 @@ app.use('/api/referrals', referralRoutes);
 app.use('/api/tasks', taskRoutes);
 app.use('/api/symptom-checker', symptomCheckerRoutes);
 app.use('/api/users', userRoutes);
+app.use('/api/notifications', notificationRoutes);
 
 // Simple health check
 app.get('/api/health', (req, res) => res.json({ status: 'ok' }));
