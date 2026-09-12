@@ -60,7 +60,7 @@ const FATAL = ['permission_denied', 'unsupported', 'insecure_context']
  * owns them. Deriving the phase from the real state instead of a second copy is
  * what keeps the two from drifting apart.
  */
-export function useVoiceMode({ lang, busy, speaking, onTranscript, onError }) {
+export function useVoiceMode({ lang, busy, speaking, onTranscript, onUnrecognised, onError }) {
   const [active, setActive] = useState(false)
   const [capturing, setCapturing] = useState(false)
   const [transcribing, setTranscribing] = useState(false)
@@ -109,10 +109,18 @@ export function useVoiceMode({ lang, busy, speaking, onTranscript, onError }) {
       if (!blob || blob.size < 800) return
 
       const result = await transcribe(blob, langRef.current)
-      // Silence is not a failure. Saying "I didn't catch that" after every
-      // pause would make the assistant unbearable to sit next to.
-      if (!result.text) return
       if (!activeRef.current) return // stopped while we were transcribing
+
+      /**
+       * Somebody spoke and we could not make it out.
+       *
+       * The level gate above has already thrown away true silence, so reaching
+       * here with no text means real speech that came back unrecognised. That
+       * has to be said out loud — the alternative is a loop that quietly
+       * listens again and leaves a non-reader with no idea it heard nothing.
+       * It must never be turned into a guess at what they meant.
+       */
+      if (!result.text) { onUnrecognised?.(); return }
 
       onTranscript({ ...result, blob })
     } catch (err) {
@@ -121,7 +129,7 @@ export function useVoiceMode({ lang, busy, speaking, onTranscript, onError }) {
     } finally {
       setTranscribing(false)
     }
-  }, [onTranscript, onError])
+  }, [onTranscript, onUnrecognised, onError])
 
   const listen = useCallback(async () => {
     if (handleRef.current) return // never two microphones

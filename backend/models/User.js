@@ -30,6 +30,30 @@ const userSchema = new mongoose.Schema({
      * The distinction that matters is kept in workerType below.
      */
     role: { type: String, enum: ['patient', 'doctor', 'pharmacy', 'hospital', 'health_worker'], required: true },
+
+    /**
+     * Where a facility physically is, captured at sign-up.
+     *
+     * Only hospital and pharmacy accounts have this: a patient's or doctor's
+     * whereabouts is none of the platform's business, and asking for it would
+     * be a permission prompt with nothing behind it.
+     *
+     * GeoJSON so it matches the shape Hospital already stores and stays usable
+     * by a `2dsphere` index later. `accuracy` is the radius in metres the
+     * browser reported — kept because a 2 km fix and a 10 m fix are not the
+     * same claim, and a human reviewing the record needs to see which it was.
+     * `address` is the reverse-geocoded text that was shown to the person
+     * before they finished signing up; it is never invented when lookup fails.
+     */
+    facilityLocation: {
+        type: {
+            type: String,
+            enum: ['Point']
+        },
+        coordinates: { type: [Number] } // [longitude, latitude]
+    },
+    facilityLocationAccuracy: { type: Number },
+    facilityAddress: { type: String }
     workerType: { type: String, enum: ['asha', 'anm', 'cho'] },
     age: { type: Number },
     gender: { type: String, enum: ['female', 'male', 'other'] },

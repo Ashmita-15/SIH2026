@@ -1,5 +1,8 @@
 import mongoose from 'mongoose';
 
+/** The ways a consultation can happen. `offline` is an in-person visit. */
+export const CONSULTATION_TYPES = ['video', 'chat', 'offline'];
+
 const appointmentSchema = new mongoose.Schema({
     patientId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
     doctorId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
@@ -29,7 +32,13 @@ const appointmentSchema = new mongoose.Schema({
     seatNo: { type: Number, default: null },
 
     symptoms: { type: String }, // Patient's symptoms/reason for visit
-    consultationType: { type: String, enum: ['video', 'chat'], default: 'video' },
+    /**
+     * `offline` is an in-person visit to the clinic. It books, queues, gets an
+     * ETA and completes exactly like the other two — the only difference is
+     * that there is no call to join, which is enforced in the UI rather than
+     * here so the lifecycle stays identical.
+     */
+    consultationType: { type: String, enum: CONSULTATION_TYPES, default: 'video' },
 
     /**
      * Assisted consultation: a health worker sitting with the patient,

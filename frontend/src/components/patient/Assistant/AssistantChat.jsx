@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react'
+import React, { useState, useEffect, useRef, useCallback, useSyncExternalStore } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { useAuth } from '../../../context/AuthContext'
@@ -21,10 +21,11 @@ import { useVoiceMode, VOICE } from './useVoiceMode'
 import { speak, stopSpeaking, primeVoices, canSpeak } from '../../../lib/voice'
 import {
   BOOKING, emptyDraft, fingerprintOf, isComplete, isAffirm, isCancel,
-  fetchDoctors, fetchOfferings, resolveDoctor, resolveDate, resolveSlot, resolveSession,
-  listSlots, listSessions, submitBooking
+  fetchDoctors, fetchOfferings, resolveDoctor, resolveDate, resolveSession,
+  listSessions, submitBooking
 } from '../../../lib/bookingFlow'
-import { slotLabel } from '../../../lib/slots'
+import { parseChoice, numberList, matchDoctor } from '../../../lib/doctorMatch'
+import { getBooking, setBooking, subscribeBooking } from '../../../lib/bookingStore'
 
 const MAX_FILES = 3
 const newId = () => `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
@@ -74,18 +75,21 @@ export default function AssistantChat({ compact = false, voiceStartSignal = 0, v
    * read out. If any field moves, the fingerprint moves with it and the old
    * yes no longer describes anything.
    */
-  const [booking, setBooking] = useState({
-    status: BOOKING.IDLE,
-    draft: emptyDraft(),
-    confirmedFp: null,
-    dateWord: null,
-    doctors: [],
-    offer: null
-  })
-  const bookingRef = useRef(booking)
+  /**
+   * Held in a module store, not in this component.
+   *
+   * The first booking turn navigates, the launcher closes the sheet when that
+   * happens, and closing the sheet unmounts this chat — so component state
+   * lost the doctor, the day and the fetched sessions between one sentence and
+   * the next. See lib/bookingStore.js.
+   */
+  const booking = useSyncExternalStore(subscribeBooking, getBooking)
+  const bookingRef = useRef(getBooking())
+  bookingRef.current = booking
   const setBookingState = useCallback((next) => {
-    bookingRef.current = typeof next === 'function' ? next(bookingRef.current) : next
-    setBooking(bookingRef.current)
+    // Written through the ref as well, so a turn that sets the doctor and then
+    // reads it back in the same tick sees the new value.
+    bookingRef.current = setBooking(next)
   }, [])
   // One booking request at a time, however many times "haan" arrives.
   const bookingInFlight = useRef(false)
@@ -151,13 +155,32 @@ export default function AssistantChat({ compact = false, voiceStartSignal = 0, v
    * `streaming` at true — which in Voice Mode wedges the loop in PROCESSING
    * and stops it listening again, with nothing on screen to say why.
    */
+  const speakTimer = useRef(null)
   const readAloud = useCallback((id, text) => {
     if (!text) return
+    if (speakTimer.current) clearTimeout(speakTimer.current)
+    const clear = () => {
+      if (speakTimer.current) { clearTimeout(speakTimer.current); speakTimer.current = null }
+      setSpeakingId(null)
+    }
     try {
-      const spoken = speak(text, i18n.language, { onEnd: () => setSpeakingId(null) })
-      if (spoken) setSpeakingId(id)
+      const spoken = speak(text, i18n.language, { onEnd: clear })
+      if (!spoken) return
+      setSpeakingId(id)
+      /**
+       * A watchdog, because `onend` is not guaranteed.
+       *
+       * On a device with no installed voice for the chosen language — and in
+       * any headless browser — `speechSynthesis.speak` accepts the utterance
+       * and then fires neither `onend` nor `onerror`. `speakingId` stays set,
+       * and since the Voice Mode loop refuses to record while the assistant
+       * is speaking, it waits forever: the patient answers a question nobody
+       * is listening to. Generous enough never to cut real speech short.
+       */
+      const ms = Math.min(60_000, 3_000 + String(text).length * 90)
+      speakTimer.current = setTimeout(clear, ms)
     } catch {
-      setSpeakingId(null) // silence is a fine outcome; a dead turn is not
+      clear() // silence is a fine outcome; a dead turn is not
     }
   }, [i18n.language])
 
@@ -200,21 +223,54 @@ export default function AssistantChat({ compact = false, voiceStartSignal = 0, v
     const lang = i18n.language
     const draft = { ...b.draft }
     let { doctors, offer, dateWord } = b
-    const say = (text, next) => { setBookingState({ ...b, ...next, draft }); finishReply(replyId, text, viaVoice) }
+    // `pendingDoctors` is cleared by default: a numbered list stays answerable
+    // only for the turn it was read out, so "two" cannot select a doctor from
+    // a question three turns old.
+    const say = (text, next) => {
+      setBookingState({ ...b, pendingDoctors: null, ...next, draft })
+      finishReply(replyId, text, viaVoice)
+    }
 
     // ── doctor ──────────────────────────────────────────────────────────
+    /**
+     * A numbered answer to a list we just read out.
+     *
+     * Checked before name matching, and only while a list is actually on
+     * offer: "two" is a choice when we asked "which of these two", and an
+     * ordinary word at any other moment.
+     */
+    if (!draft.doctorId && b.pendingDoctors?.length) {
+      const pick = parseChoice(hints.sessionText, b.pendingDoctors.length)
+      if (pick) {
+        const chosen = b.pendingDoctors[pick - 1]
+        draft.doctorId = chosen._id
+        draft.doctorName = chosen.name
+        draft.sessionId = null
+        offer = null
+      }
+    }
+
     if (!draft.doctorId || hints.doctorHint) {
       if (!doctors.length) { try { doctors = await fetchDoctors() } catch { doctors = [] } }
-      const { doctor, candidates } = resolveDoctor(hints.doctorHint, doctors)
+      const { doctor, candidates } = resolveDoctor(hints.doctorHint, doctors, hints.sessionText)
       if (doctor) {
-        if (doctor._id !== draft.doctorId) { draft.timeSlot = null; draft.sessionId = null; offer = null }
+        if (doctor._id !== draft.doctorId) { draft.sessionId = null; offer = null }
         draft.doctorId = doctor._id
         draft.doctorName = doctor.name
       } else if (!draft.doctorId) {
-        const list = (candidates.length ? candidates : doctors).map(d => d.name).join(', ')
+        /**
+         * Never a guess. Several plausible names become a numbered list the
+         * patient answers; no plausible name asks again with the real ones,
+         * so a mishearing cannot strand somebody with nothing to say.
+         */
+        const offered = candidates.length ? candidates : doctors.slice(0, 5)
         return say(
-          t(candidates.length ? 'booking.doctorAmbiguous' : 'booking.doctorUnknown', { list }),
-          { doctors, offer: null, confirmedFp: null, status: BOOKING.COLLECTING_DOCTOR }
+          t(candidates.length ? 'booking.doctorAmbiguous' : 'booking.doctorUnknown',
+            { list: numberList(offered) }),
+          {
+            doctors, offer: null, confirmedFp: null,
+            pendingDoctors: offered, status: BOOKING.COLLECTING_DOCTOR
+          }
         )
       }
     }
@@ -225,7 +281,7 @@ export default function AssistantChat({ compact = false, voiceStartSignal = 0, v
       if (iso && iso !== draft.requestedDate) {
         draft.requestedDate = iso
         dateWord = hints.dateHint
-        draft.timeSlot = null // a free hour on one day says nothing about another
+        draft.sessionId = null // a session on one day says nothing about another
         offer = null
       }
     }
@@ -237,77 +293,55 @@ export default function AssistantChat({ compact = false, voiceStartSignal = 0, v
     }
 
     /**
-     * What the doctor is offering — sessions if they run them, hours if not.
+     * What the doctor is offering on this day: sessions, or nothing.
      *
      * Read from the same endpoint the manual booking form uses, so the voice
-     * path can never offer something the screen would refuse.
+     * path can never offer something the screen would refuse. There is no
+     * hourly fallback on either path any more.
      */
     if (!offer) {
       try { offer = await fetchOfferings(draft.doctorId, draft.requestedDate) }
-      catch { offer = { mode: 'slot', sessions: [], slots: [] } }
+      catch { offer = { mode: 'session', sessions: [] } }
     }
-    const sessionMode = offer.mode === 'session'
-    const options = sessionMode ? offer.sessions : offer.slots
     const dateLabel = dateWord ? t(`booking.${dateWord}`) : draft.requestedDate
 
-    if (!options.length) {
+    if (!offer.sessions.length) {
       draft.requestedDate = null
       return say(
-        t(sessionMode ? 'booking.noSessions' : 'booking.noSlots', { doctor: draft.doctorName, date: dateLabel }),
+        t('booking.noSessions', { doctor: draft.doctorName, date: dateLabel }),
         { doctors, offer: null, dateWord: null, confirmedFp: null, status: BOOKING.COLLECTING_DATE }
       )
     }
 
-    // ── session, or hour ────────────────────────────────────────────────
-    if (sessionMode) {
-      if (!draft.sessionId && (hints.bandHint || hints.hourHint || hints.sessionText)) {
-        const picked = resolveSession(
-          { bandHint: hints.bandHint, hourHint: hints.hourHint, text: hints.sessionText },
-          offer.sessions
-        )
-        if (picked) {
-          draft.sessionId = picked.sessionId
-          draft.sessionName = picked.name
-          draft.sessionLabel = listSessions([picked], lang)
-          draft.timeSlot = null
-        } else {
-          return say(
-            t('booking.sessionUnknown', { sessions: listSessions(offer.sessions, lang) }),
-            { doctors, offer, dateWord, confirmedFp: null, status: BOOKING.COLLECTING_SLOT }
-          )
-        }
-      }
-      if (!draft.sessionId) {
+    // -- which session -------------------------------------------------
+    if (!draft.sessionId && (hints.bandHint || hints.hourHint || hints.sessionText)) {
+      const picked = resolveSession(
+        { bandHint: hints.bandHint, hourHint: hints.hourHint, text: hints.sessionText },
+        offer.sessions
+      )
+      if (picked) {
+        draft.sessionId = picked.sessionId
+        draft.sessionName = picked.name
+        draft.sessionLabel = listSessions([picked], lang)
+      } else {
         return say(
-          t('booking.askSession', { date: dateLabel, sessions: listSessions(offer.sessions, lang) }),
+          t('booking.sessionUnknown', { sessions: listSessions(offer.sessions, lang) }),
           { doctors, offer, dateWord, confirmedFp: null, status: BOOKING.COLLECTING_SLOT }
         )
       }
-    } else {
-      if (hints.hourHint) {
-        const slot = resolveSlot(hints.hourHint, offer.slots)
-        if (!slot) {
-          draft.timeSlot = null
-          return say(
-            t('booking.slotUnknown', { slots: listSlots(offer.slots, lang) }),
-            { doctors, offer, dateWord, confirmedFp: null, status: BOOKING.COLLECTING_SLOT }
-          )
-        }
-        draft.timeSlot = slot
-      }
-      if (!draft.timeSlot) {
-        return say(
-          t('booking.askSlot', { date: dateLabel, slots: listSlots(offer.slots, lang) }),
-          { doctors, offer, dateWord, confirmedFp: null, status: BOOKING.COLLECTING_SLOT }
-        )
-      }
+    }
+    if (!draft.sessionId) {
+      return say(
+        t('booking.askSession', { date: dateLabel, sessions: listSessions(offer.sessions, lang) }),
+        { doctors, offer, dateWord, confirmedFp: null, status: BOOKING.COLLECTING_SLOT }
+      )
     }
 
     // ── read it back and wait to be told yes ────────────────────────────
     const fp = fingerprintOf(draft)
     const shown = {
       doctor: draft.doctorName, date: dateLabel,
-      slot: sessionMode ? draft.sessionLabel : slotLabel(draft.timeSlot, lang),
+      slot: draft.sessionLabel,
       symptoms: draft.symptoms
     }
     say(
@@ -316,7 +350,7 @@ export default function AssistantChat({ compact = false, voiceStartSignal = 0, v
     )
     // Said plainly here, because the number is what a patient expects next and
     // its absence would otherwise look like the booking half-failed.
-    if (sessionMode) pushAssistant(t('booking.queueLater'), viaVoice)
+    pushAssistant(t('booking.queueLater'), false)
   }, [i18n.language, t, finishReply, setBookingState, pushAssistant])
 
   /**
@@ -342,9 +376,8 @@ export default function AssistantChat({ compact = false, voiceStartSignal = 0, v
     try {
       await submitBooking(draft)
       setBookingState({ status: BOOKING.BOOKED, draft: emptyDraft(), confirmedFp: null, dateWord: null, doctors: b.doctors, offer: null })
-      pushAssistant(t(draft.sessionId ? 'booking.bookedSession' : 'booking.booked', {
-        doctor: draft.doctorName, date: dateLabel,
-        slot: draft.sessionId ? draft.sessionLabel : slotLabel(draft.timeSlot, lang)
+      pushAssistant(t('booking.bookedSession', {
+        doctor: draft.doctorName, date: dateLabel, slot: draft.sessionLabel
       }), viaVoice)
       window.dispatchEvent(new CustomEvent('appointments:changed'))
     } catch (err) {
@@ -355,17 +388,24 @@ export default function AssistantChat({ compact = false, voiceStartSignal = 0, v
          * Nothing was booked, so nothing is claimed — the real availability is
          * fetched again and the patient chooses from what is actually left.
          */
-        let fresh = []
-        try { fresh = await fetchOfferings(draft.doctorId, draft.requestedDate) } catch { fresh = { mode: 'slot', sessions: [], slots: [] } }
-        const next = { ...draft, timeSlot: null }
-        if (!fresh.length) next.requestedDate = null
+        let fresh = { mode: 'session', sessions: [] }
+        try { fresh = await fetchOfferings(draft.doctorId, draft.requestedDate) } catch { /* treated as none left */ }
+        /**
+         * `fresh.sessions.length`, not `fresh.length`: fetchOfferings returns
+         * an object. Testing the object's own length read undefined, so this
+         * always took the "nothing left today" branch and threw away the
+         * sessions that were still open.
+         */
+        const left = fresh.sessions
+        const next = { ...draft, sessionId: null, sessionName: null, sessionLabel: null }
+        if (!left.length) next.requestedDate = null
         setBookingState({
-          ...b, draft: next, slots: fresh, confirmedFp: null,
-          dateWord: fresh.length ? b.dateWord : null,
-          status: fresh.length ? BOOKING.COLLECTING_SLOT : BOOKING.COLLECTING_DATE
+          ...b, draft: next, offer: left.length ? fresh : null, confirmedFp: null,
+          dateWord: left.length ? b.dateWord : null,
+          status: left.length ? BOOKING.COLLECTING_SLOT : BOOKING.COLLECTING_DATE
         })
-        pushAssistant(fresh.length
-          ? t('booking.conflict', { slots: listSlots(fresh, lang) })
+        pushAssistant(left.length
+          ? t('booking.conflict', { slots: listSessions(left, lang) })
           : t('booking.conflictNoSlots', { date: dateLabel }), viaVoice)
       } else {
         // Anything else — validation, auth, a dead network. The draft is kept
@@ -476,7 +516,6 @@ export default function AssistantChat({ compact = false, voiceStartSignal = 0, v
               draft: { ...emptyDraft(), symptoms: event.context?.symptom || '' },
               confirmedFp: null, dateWord: null, slots: []
             }))
-            fetchDoctors().then(list => setBookingState(b => ({ ...b, doctors: list }))).catch(() => {})
           } else {
             resetBooking()
           }
@@ -534,7 +573,10 @@ export default function AssistantChat({ compact = false, voiceStartSignal = 0, v
     // of its own for real availability.
     // The patient's own words travel with the hints so a session can be chosen
     // by the name the doctor gave it, not only by a time band.
-    if (hints) await applyHints({ ...hints, sessionText: latest?.text || '' }, replyId, viaVoice)
+    if (hints) {
+      await new Promise(r => setTimeout(r, 0))
+      await applyHints({ ...hints, sessionText: latest?.text || '' }, replyId, viaVoice)
+    }
 
     // Aborting resolves normally, so a stopped stream keeps whatever text
     // arrived and simply stops being "streaming".
@@ -606,17 +648,47 @@ export default function AssistantChat({ compact = false, voiceStartSignal = 0, v
    * already the whole gesture, and asking a non-reader to confirm written
    * text before it sends would defeat the point.
    *
-   * The language detected from the audio wins over the app setting: someone
-   * who cannot read is not going to find the language dropdown.
+   * The app language decides everything, and the audio never changes it.
+   *
+   * This used to switch the whole interface to whatever language the model
+   * thought it heard, which made a single mis-detected word — or a Hinglish
+   * sentence — silently retranslate every screen out from under someone who
+   * had deliberately chosen Marathi. The choice is the user's; recognition is
+   * a guess. The transcript itself is passed through exactly as returned and
+   * never translated.
    */
-  const onTranscript = useCallback(({ text, lang, blob }) => {
-    if (lang && lang !== i18n.language) i18n.changeLanguage(lang)
+  const onTranscript = useCallback(({ text, blob }) => {
     if (blob) {
       const ext = (blob.type.split('/')[1] || 'webm').split(';')[0]
       voiceNotesRef.current.push(new File([blob], `voice-${Date.now()}.${ext}`, { type: blob.type }))
     }
     send({ text, viaVoice: true })
-  }, [send, i18n])
+  }, [send])
+
+  /**
+   * A way to drive a spoken turn without a microphone, for development only.
+   *
+   * Transcription happens on the server, so there is no browser
+   * SpeechRecognition event to fake: `onTranscript` *is* the point every
+   * final transcript arrives at, held mic or hands-free. Injecting here
+   * therefore exercises the real path — same red-flag check, same stream,
+   * same booking state machine — rather than a shortcut around it.
+   *
+   * Stripped from production builds by the `import.meta.env.DEV` guard.
+   */
+  useEffect(() => {
+    if (!import.meta.env.DEV) return
+    window.__voiceSathi = {
+      say: (text) => onTranscript({ text }),
+      state: () => ({
+        status: bookingRef.current.status,
+        draft: bookingRef.current.draft,
+        pendingDoctors: (bookingRef.current.pendingDoctors || []).map(d => d.name),
+        sessions: (bookingRef.current.offer?.sessions || []).map(s => s.name)
+      })
+    }
+    return () => { delete window.__voiceSathi }
+  }, [onTranscript])
 
   const onVoiceError = useCallback((code, { fatal = false } = {}) => {
     const message = t(`assistant.voiceErrors.${code}`, t('assistant.voiceErrors.mic_failed'))
@@ -630,11 +702,23 @@ export default function AssistantChat({ compact = false, voiceStartSignal = 0, v
    * does, so a spoken turn is indistinguishable from a held one by the time it
    * reaches `send` — same red-flag check, same stream, same navigation.
    */
+  /**
+   * Speech we heard but could not read back.
+   *
+   * Answered with one fixed sentence in the selected language, spoken aloud,
+   * and nothing else: no guess at the words, no navigation, no booking step.
+   * A wrong guess here would be acted on as though the patient had said it.
+   */
+  const onUnrecognised = useCallback(() => {
+    pushAssistant(t('assistant.voiceRetry'), true)
+  }, [pushAssistant, t])
+
   const voice = useVoiceMode({
     lang: i18n.language,
     busy: streaming,
     speaking: speakingId !== null,
     onTranscript,
+    onUnrecognised,
     onError: onVoiceError
   })
 

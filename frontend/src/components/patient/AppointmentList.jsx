@@ -80,7 +80,7 @@ export default function AppointmentList({ appointments, onChanged, emptyAction }
             perspective="patient"
             actions={
               <>
-                {appointment.status === 'confirmed' && (
+                {appointment.status === 'confirmed' && isRemote(appointment) && (
                   <Button size="sm" onClick={() => navigate(`/patient/care/call/${appointment._id}`)}>
                     {t('appointments.joinConsultation')}
                   </Button>

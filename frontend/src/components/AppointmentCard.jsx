@@ -52,7 +52,7 @@ export default function AppointmentCard({ appointment, perspective = 'patient', 
           <div className="flex justify-between gap-3 sm:block">
             <dt className="text-muted">{t('appointments.type')}</dt>
             <dd className="text-ink font-medium sm:mt-0.5">
-              {t(`appointments.${appointment.consultationType === 'chat' ? 'chat' : 'video'}`)}
+              {t(`appointments.${CONSULTATION_LABEL[appointment.consultationType] || 'video'}`)}
             </dd>
           </div>
           <div className="flex justify-between gap-3 sm:block">

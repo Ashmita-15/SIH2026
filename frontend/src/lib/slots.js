@@ -17,8 +17,8 @@ export function slotLabel(slot, lang = 'en') {
 function clock(hhmm, lang) {
   const [h] = hhmm.split(':').map(Number)
   const suffix = h < 12
-    ? { en: 'AM', hi: 'सुबह', pa: 'ਸਵੇਰੇ', mr: 'सकाळी', bn: 'সকাল' }[lang] || 'AM'
-    : { en: 'PM', hi: 'शाम', pa: 'ਸ਼ਾਮ', mr: 'संध्याकाळी', bn: 'সন্ধ্যা' }[lang] || 'PM'
+    ? { en: 'AM', hi: 'सुबह', mr: 'सकाळी', bn: 'সকাল' }[lang] || 'AM'
+    : { en: 'PM', hi: 'शाम', mr: 'संध्याकाळी', bn: 'সন্ধ্যা' }[lang] || 'PM'
   const twelve = h % 12 === 0 ? 12 : h % 12
   return lang === 'en' ? `${twelve} ${suffix}` : `${suffix} ${twelve}`
 }

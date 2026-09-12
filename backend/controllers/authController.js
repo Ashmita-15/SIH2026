@@ -2,10 +2,15 @@ import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import User from '../models/User.js';
 import Hospital from '../models/Hospital.js';
+import { isValidLatLon } from '../services/geocode.js';
+
+/** Roles that represent a physical place patients travel to. */
+const FACILITY_ROLES = ['hospital', 'pharmacy'];
 import { notifyAccountCreated } from '../services/notifications/notificationService.js';
 export const register = async (req, res) => {
     try {
-        const { name, email, password, role, age, village, specialization, qualification, availability, workerType } = req.body;
+        const { name, email, password, role, age, village, specialization, qualification, availability, workerType,
+            latitude, longitude, accuracy, address } = req.body;
         const existing = await User.findOne({ email });
         if (existing) return res.status(400).json({ message: 'Email already registered' });
 
@@ -26,12 +31,43 @@ export const register = async (req, res) => {
             }
         }
 
+        /**
+         * A facility has to say where it is.
+         *
+         * Patients are shown facilities by distance and travel to them, so a
+         * hospital or pharmacy with no coordinates is an entry nobody can act
+         * on. The browser supplies the fix and the address is reverse-geocoded
+         * from it — both are re-validated here, because a client could post
+         * anything, and an address is only accepted alongside real numbers.
+         */
+        let facility = null;
+        if (FACILITY_ROLES.includes(role)) {
+            const lat = Number(latitude);
+            const lon = Number(longitude);
+            if (!isValidLatLon(lat, lon)) {
+                return res.status(400).json({
+                    message: 'Allow location access so patients can find this facility'
+                });
+            }
+            const shown = String(address || '').trim();
+            if (!shown) {
+                return res.status(400).json({ message: 'A detected address is required' });
+            }
+            const metres = Number(accuracy);
+            facility = {
+                facilityLocation: { type: 'Point', coordinates: [lon, lat] },
+                facilityLocationAccuracy: Number.isFinite(metres) && metres >= 0 ? Math.round(metres) : undefined,
+                facilityAddress: shown.slice(0, 300)
+            };
+        }
+
         const passwordHash = await bcrypt.hash(password, 10);
 
         let user;
-        if (role === 'hospital') {
-            // Create hospital user
-            user = await User.create({ name, email, passwordHash, role });
+        if (FACILITY_ROLES.includes(role)) {
+            // The facility's own profile is completed later; what it cannot be
+            // missing is where it is.
+            user = await User.create({ name, email, passwordHash, role, ...facility });
 
             // For hospital registration, we need additional info in a separate endpoint
             // since hospital has more fields than what's collected during basic registration

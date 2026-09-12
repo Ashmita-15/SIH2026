@@ -1,5 +1,6 @@
-import React, { useState, useEffect, useRef, lazy, Suspense } from 'react'
+import React, { useState, useEffect, useRef, lazy, Suspense, useSyncExternalStore } from 'react'
 import { createPortal } from 'react-dom'
+import { subscribeBooking, bookingIsActive } from '../../../lib/bookingStore'
 import { useLocation } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { useAuth } from '../../../context/AuthContext'
@@ -46,7 +47,16 @@ export default function AssistantLauncher() {
    * conversation. Mounting now follows use, not visibility — which is also why
    * the previous "minimise instead of close" workaround could be deleted.
    */
-  const mounted = open || voiceActive || voiceWanted
+  /**
+   * …and while an appointment is being arranged.
+   *
+   * The first booking turn navigates, which closes the sheet. Without this the
+   * chat unmounts mid-conversation and the in-flight stream dies with it — the
+   * state now survives in the store, but the turn that was still running does
+   * not.
+   */
+  const bookingLive = useSyncExternalStore(subscribeBooking, bookingIsActive)
+  const mounted = open || voiceActive || voiceWanted || bookingLive
 
   // The assistant's own page renders its own chat; ours stays out of its way,
   // but a live voice session still has to survive being taken there.

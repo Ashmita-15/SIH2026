@@ -149,7 +149,7 @@ ${SYMPTOMS.join(', ')}
   Empty array if they described nothing physical.
 
   Some pairs differ only in how bad the patient said it was. When they use a word
-  meaning high, severe, very or a lot — "tez", "तेज़", "ਤੇਜ਼", "bahut", "severe",
+  meaning high, severe, very or a lot — "tez", "तेज़", "bahut", "severe",
   "unbearable" — or give a temperature of 39C/102F or more, choose the stronger label.
   When in doubt between the two, choose the stronger one:
     fever / high_fever
@@ -161,7 +161,7 @@ ${SYMPTOMS.join(', ')}
 - pregnant: true only if they said they are pregnant. Otherwise false.
 
 Rules:
-- People speak Hindi, Punjabi and English, often mixed and in Latin letters.
+- People speak Hindi, Marathi, Bengali and English, often mixed and in Latin letters.
 - Report only what they said. Never add a symptom to be helpful.
 - Never return a severity, an urgency, a care level, a diagnosis, advice, or any other field.
 - Return ONLY the JSON object.`;

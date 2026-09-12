@@ -8,9 +8,8 @@ import { Field, Input, Textarea, Select } from '../ui/Field'
 import Button, { IconButton } from '../ui/Button'
 import Card, { CardBody, CardHeader } from '../ui/Card'
 import DoctorPicker from '../DoctorPicker'
-import SlotPicker from './SlotPicker'
 import SessionPicker from './SessionPicker'
-import { slotLabel, toISODate } from '../../lib/slots'
+import { toISODate } from '../../lib/slots'
 import { formatFileSize } from '../../lib/status'
 
 const MAX_FILES = 5
@@ -23,15 +22,10 @@ export default function BookingForm({ selectedDoctor: doctorFromProps, prefillSy
 
   const [doctorsBySpecialty, setDoctorsBySpecialty] = useState({})
   const [selectedDoctor, setSelectedDoctor] = useState(doctorFromProps || null)
-  // { date: 'YYYY-MM-DD', slot: '09:00-10:00' } — the patient now asks for a
-  // specific hour, which is what lets the doctor accept in one tap.
-  const [when, setWhen] = useState({ date: '', slot: '' })
   /**
-   * Doctors who run sessions get the session picker; everyone else keeps the
-   * hourly grid. Checked per doctor rather than globally so the two ways of
-   * booking coexist while clinics adopt sessions.
+   * One picker. Booking is session-only, so there is no slot half to keep in
+   * step and no mode to probe for — a doctor with no session is not listed.
    */
-  const [sessionMode, setSessionMode] = useState(null)
   const [pick, setPick] = useState({ date: '', sessionId: '', sessionName: '' })
   const [symptoms, setSymptoms] = useState(prefillSymptoms || '')
   const [consultationType, setConsultationType] = useState('video')
@@ -70,38 +64,6 @@ export default function BookingForm({ selectedDoctor: doctorFromProps, prefillSy
   useEffect(() => { if (userId) load() }, [userId, load])
 
   useEffect(() => { if (doctorFromProps) setSelectedDoctor(doctorFromProps) }, [doctorFromProps])
-
-  /**
-   * Does this doctor run sessions at all?
-   *
-   * Answered by `configured`, not by whether any session happens to run on the
-   * date probed — a doctor whose clinic is Saturdays only would otherwise look
-   * slot-based from Sunday to Friday. `toISODate` rather than toISOString:
-   * the latter converts to UTC and, at +05:30, turns tomorrow back into today.
-   */
-  useEffect(() => {
-    if (!selectedDoctor?._id) { setSessionMode(null); return }
-    let cancelled = false
-
-    const hasActiveSessionsInProp = Array.isArray(selectedDoctor.sessions) && selectedDoctor.sessions.some(s => s.active !== false)
-    if (hasActiveSessionsInProp) {
-      setSessionMode(true)
-    }
-
-    api.get(`/sessions/doctor/${selectedDoctor._id}`, { params: { date: toISODate(new Date()) } })
-      .then(({ data }) => {
-        if (!cancelled) {
-          const isConfigured = Number(data?.configured) > 0 || (Array.isArray(data?.sessions) && data.sessions.length > 0)
-          setSessionMode(Boolean(isConfigured || hasActiveSessionsInProp))
-        }
-      })
-      .catch(() => {
-        if (!cancelled && !hasActiveSessionsInProp) {
-          setSessionMode(false)
-        }
-      })
-    return () => { cancelled = true }
-  }, [selectedDoctor])
 
   // Always release camera and microphone, even if the user navigates away
   // mid-recording.
@@ -168,9 +130,7 @@ export default function BookingForm({ selectedDoctor: doctorFromProps, prefillSy
   const validate = () => {
     const next = {}
     if (!selectedDoctor) next.doctor = t('appointments.noDoctorSelected')
-    if (sessionMode) {
-      if (!pick.date || !pick.sessionId) next.date = t('sessions.pickFirst')
-    } else if (!when.date || !when.slot) next.date = t('appointments.pickTimeFirst')
+    if (!pick.date || !pick.sessionId) next.date = t('sessions.pickFirst')
     setErrors(next)
     return Object.keys(next).length === 0
   }
@@ -187,9 +147,8 @@ export default function BookingForm({ selectedDoctor: doctorFromProps, prefillSy
       const formData = new FormData()
       formData.append('patientId', userId)
       formData.append('doctorId', selectedDoctor._id)
-      formData.append('requestedDate', sessionMode ? pick.date : when.date)
-      if (sessionMode) formData.append('sessionId', pick.sessionId)
-      else formData.append('timeSlot', when.slot)
+      formData.append('requestedDate', pick.date)
+      formData.append('sessionId', pick.sessionId)
       formData.append('symptoms', symptoms)
       formData.append('consultationType', consultationType)
       mediaFiles.forEach(file => formData.append('attachments', file))
@@ -208,7 +167,6 @@ export default function BookingForm({ selectedDoctor: doctorFromProps, prefillSy
         toast.success(t('appointments.requestSent'))
       }
 
-      setWhen({ date: '', slot: '' })
       setPick({ date: '', sessionId: '', sessionName: '' })
       setSymptoms('')
       setSelectedDoctor(null)
@@ -260,9 +218,9 @@ export default function BookingForm({ selectedDoctor: doctorFromProps, prefillSy
                   onSelect={(d) => {
                     setSelectedDoctor(d)
                     setChangingDoctor(false)
-                    // Availability belongs to a doctor, so a new doctor
-                    // invalidates the slot that was picked for the old one.
-                    setWhen({ date: '', slot: '' })
+                    // Sessions belong to a doctor, so a new doctor invalidates
+                    // the session that was picked for the old one.
+                    setPick({ date: '', sessionId: '', sessionName: '' })
                     setErrors(e => ({ ...e, doctor: undefined }))
                   }}
                 />
@@ -270,7 +228,7 @@ export default function BookingForm({ selectedDoctor: doctorFromProps, prefillSy
               {errors.doctor && <p className="error-text mt-2" role="alert">{errors.doctor}</p>}
             </div>
 
-            {selectedDoctor && sessionMode === true && (
+            {selectedDoctor && (
               <SessionPicker
                 doctorId={selectedDoctor._id}
                 value={pick}
@@ -279,21 +237,12 @@ export default function BookingForm({ selectedDoctor: doctorFromProps, prefillSy
               />
             )}
 
-            {selectedDoctor && sessionMode === false && (
-              <SlotPicker
-                doctorId={selectedDoctor._id}
-                value={when}
-                error={errors.date}
-                preferredTime={prefillPreferredTime}
-                onChange={(next) => { setWhen(next); setErrors(err => ({ ...err, date: undefined })) }}
-              />
-            )}
-
             <Field label={t('appointments.consultationType')}>
               {(props) => (
                 <Select {...props} value={consultationType} onChange={(e) => setConsultationType(e.target.value)}>
                   <option value="video">{t('appointments.video')}</option>
                   <option value="chat">{t('appointments.chat')}</option>
+                  <option value="offline">{t('appointments.offline')}</option>
                 </Select>
               )}
             </Field>
@@ -443,13 +392,9 @@ export default function BookingForm({ selectedDoctor: doctorFromProps, prefillSy
                   <div className="flex gap-2">
                     <dt className="text-muted shrink-0">{t('appointments.summary.chosen')}:</dt>
                     <dd className="text-ink min-w-0">
-                      {sessionMode
-                        ? (pick.date && pick.sessionId
-                            ? `${pick.date} · ${pick.sessionName}`
-                            : t('appointments.summary.notChosen'))
-                        : (when.date && when.slot
-                            ? `${when.date} · ${slotLabel(when.slot, i18n.language)}`
-                            : t('appointments.summary.notChosen'))}
+                      {pick.date && pick.sessionId
+                        ? `${pick.date} · ${pick.sessionName}`
+                        : t('appointments.summary.notChosen')}
                     </dd>
                   </div>
                   {symptoms.trim() && (
