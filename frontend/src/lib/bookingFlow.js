@@ -37,12 +37,16 @@ export const BOOKING = {
 const AFFIRM = ['haan', 'han', 'ha', 'ji', 'ji haan', 'theek hai', 'thik hai', 'ok', 'okay', 'yes', 'yeah', 'yep', 'sure',
   'book it', 'book kar do', 'kar do', 'haan book kar do',
   'हाँ', 'हां', 'जी', 'जी हाँ', 'ठीक है', 'बिल्कुल', 'हाँ कर दीजिए', 'बुक कर दीजिए', 'बुक कर दो',
-  'ਹਾਂ', 'ਜੀ', 'ਠੀਕ ਹੈ', 'ਬਿਲਕੁਲ', 'ਬੁੱਕ ਕਰ ਦਿਓ']
+  'ਹਾਂ', 'ਜੀ', 'ਠੀਕ ਹੈ', 'ਬਿਲਕੁਲ', 'ਬੁੱਕ ਕਰ ਦਿਓ',
+  'हो', 'होय', 'नक्की', 'हो करा', 'बुक करा', 'करा', 'हो बुक करा',
+  'হ্যাঁ', 'হ্যা', 'ঠিক আছে', 'অবশ্যই', 'বুক করুন', 'করুন', 'হ্যাঁ বুক করুন']
 
 const CANCEL = ['nahi', 'nahin', 'nai', 'rehne do', 'rahne do', 'nahi chahiye', 'cancel', 'stop', 'no', 'nope',
   'book mat karo', 'mat karo',
   'नहीं', 'नही', 'रहने दो', 'नहीं चाहिए', 'बंद करो', 'बुक मत करो', 'मत करो',
-  'ਨਹੀਂ', 'ਨਹੀ', 'ਰਹਿਣ ਦਿਓ', 'ਬੰਦ ਕਰੋ', 'ਬੁੱਕ ਨਾ ਕਰੋ']
+  'ਨਹੀਂ', 'ਨਹੀ', 'ਰਹਿਣ ਦਿਓ', 'ਬੰਦ ਕਰੋ', 'ਬੁੱਕ ਨਾ ਕਰੋ',
+  'नाही', 'नको', 'रद्द करा', 'थांबा', 'नको आहे', 'बंद करा', 'बुक करू नका',
+  'না', 'নয়', 'বাতিল', 'থাক', 'দরকার নেই', 'বুক করবেন না', 'বন্ধ করুন']
 
 const strip = (s) => String(s || '').toLowerCase().replace(/[.!?,।]/g, ' ').replace(/\s+/g, ' ').trim()
 const shortMatch = (text, words) => {
@@ -198,7 +202,7 @@ export function resolveDoctor(hint, doctors) {
   if (exact.length === 1) return { doctor: exact[0], candidates: [] }
 
   // "Meera", "Dr Meera", "Meera Sharma" all reach the same person.
-  const parts = q.split(' ').filter(w => w.length > 2 && !['dr', 'doctor', 'डॉ', 'डॉक्टर', 'ਡਾ'].includes(w))
+  const parts = q.split(' ').filter(w => w.length > 2 && !['dr', 'doctor', 'डॉ', 'डॉ.', 'डा.', 'डॉक्टर', 'ਡਾ', 'ডাঃ', 'ডাক্তার', 'ডা.'].includes(w))
   const loose = doctors.filter(d => {
     const name = strip(d.name)
     return parts.length > 0 && parts.every(p => name.includes(p))

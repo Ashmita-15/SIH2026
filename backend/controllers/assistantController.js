@@ -22,7 +22,7 @@ function send(res, event) {
 }
 
 function normaliseLang(lang) {
-    return ['en', 'hi', 'pa'].includes(lang) ? lang : 'en';
+    return ['en', 'hi', 'pa', 'mr', 'bn'].includes(lang) ? lang : 'en';
 }
 
 /**
@@ -379,7 +379,7 @@ export const summarise = async (req, res) => {
         const text = await generateOnce({
             systemInstruction: `Summarise this patient's own account for the doctor who will see them.
 
-Write 3 to 5 short lines, in ${locale === 'hi' ? 'Hindi' : locale === 'pa' ? 'Punjabi' : 'English'}:
+Write 3 to 5 short lines, in ${locale === 'hi' ? 'Hindi' : locale === 'pa' ? 'Punjabi' : locale === 'mr' ? 'Marathi' : locale === 'bn' ? 'Bengali' : 'English'}:
 - What they are complaining of, in their own words
 - How long it has been going on
 - Anything relevant they mentioned (medicines, existing conditions, what they already tried)

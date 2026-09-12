@@ -22,7 +22,9 @@ export const INTENTS = {
         spoken: {
             en: 'Opening the list of doctors for you.',
             hi: 'डॉक्टरों की सूची खोल रहा हूँ।',
-            pa: 'ਡਾਕਟਰਾਂ ਦੀ ਸੂਚੀ ਖੋਲ੍ਹ ਰਿਹਾ ਹਾਂ।'
+            pa: 'ਡਾਕਟਰਾਂ ਦੀ ਸੂਚੀ ਖੋਲ੍ਹ ਰਿਹਾ ਹਾਂ।',
+            mr: 'तुमच्यासाठी डॉक्टरांची यादी उघडत आहे.',
+            bn: 'আপনার জন্য ডাক্তারদের তালিকা খুলছি।'
         }
     },
     VIEW_RECORDS: {
@@ -30,7 +32,9 @@ export const INTENTS = {
         spoken: {
             en: 'Opening your health records.',
             hi: 'आपके स्वास्थ्य रिकॉर्ड खोल रहा हूँ।',
-            pa: 'ਤੁਹਾਡੇ ਸਿਹਤ ਰਿਕਾਰਡ ਖੋਲ੍ਹ ਰਿਹਾ ਹਾਂ।'
+            pa: 'ਤੁਹਾਡੇ ਸਿਹਤ ਰਿਕਾਰਡ ਖੋਲ੍ਹ ਰਿਹਾ ਹਾਂ।',
+            mr: 'तुमचे आरोग्य रेकॉर्ड उघडत आहे.',
+            bn: 'আপনার স্বাস্থ্য রেকর্ড খুলছি।'
         }
     },
     VIEW_APPOINTMENTS: {
@@ -40,7 +44,9 @@ export const INTENTS = {
         spoken: {
             en: 'Opening your appointments.',
             hi: 'आपकी अपॉइंटमेंट दिखा रहा हूँ।',
-            pa: 'ਤੁਹਾਡੀਆਂ ਮੁਲਾਕਾਤਾਂ ਵਿਖਾ ਰਿਹਾ ਹਾਂ।'
+            pa: 'ਤੁਹਾਡੀਆਂ ਮੁਲਾਕਾਤਾਂ ਵਿਖਾ ਰਿਹਾ ਹਾਂ।',
+            mr: 'तुमच्या भेटी दाखवत आहे.',
+            bn: 'আপনার অ্যাপয়েন্টমেন্ট দেখাচ্ছি।'
         }
     },
     FIND_MEDICINE: {
@@ -48,7 +54,9 @@ export const INTENTS = {
         spoken: {
             en: 'Opening nearby pharmacies.',
             hi: 'नज़दीकी दवा की दुकानें खोल रहा हूँ।',
-            pa: 'ਨੇੜਲੀਆਂ ਦਵਾਈਆਂ ਦੀਆਂ ਦੁਕਾਨਾਂ ਖੋਲ੍ਹ ਰਿਹਾ ਹਾਂ।'
+            pa: 'ਨੇੜਲੀਆਂ ਦਵਾਈਆਂ ਦੀਆਂ ਦੁਕਾਨਾਂ ਖੋਲ੍ਹ ਰਿਹਾ ਹਾਂ।',
+            mr: 'जवळपासची औषध दुकाने उघडत आहे.',
+            bn: 'কাছাকাছি ওষুধের দোকান খুলছি।'
         }
     },
     /**
@@ -65,7 +73,9 @@ export const INTENTS = {
         spoken: {
             en: 'For an emergency call 108 for an ambulance, or 112. The emergency button is on this screen.',
             hi: 'आपात स्थिति में एम्बुलेंस के लिए 108 या 112 पर कॉल करें। इस स्क्रीन पर आपातकालीन बटन है।',
-            pa: 'ਐਮਰਜੈਂਸੀ ਵਿੱਚ ਐਂਬੂਲੈਂਸ ਲਈ 108 ਜਾਂ 112 ਉੱਤੇ ਕਾਲ ਕਰੋ। ਇਸ ਸਕਰੀਨ ਉੱਤੇ ਐਮਰਜੈਂਸੀ ਬਟਨ ਹੈ।'
+            pa: 'ਐਮਰਜੈਂਸੀ ਵਿੱਚ ਐਂਬੂਲੈਂਸ ਲਈ 108 ਜਾਂ 112 ਉੱਤੇ ਕਾਲ ਕਰੋ। ਇਸ ਸਕਰੀਨ ਉੱਤੇ ਐਮਰਜੈਂਸੀ ਬਟਨ ਹੈ।',
+            mr: 'आपत्कालीन परिस्थितीत रुग्णवाहिकेसाठी १०८ किंवा ११२ वर कॉल करा. या स्क्रीनवर आपत्कालीन बटण आहे.',
+            bn: 'জরুরি পরিস্থিতিতে অ্যাম্বুলেন্সের জন্য ১০৮ বা ১১২ নম্বরে কল করুন। এই স্ক্রিনে জরুরি বোতাম রয়েছে।'
         }
     }
 };
@@ -103,7 +113,7 @@ The only permitted intent names:
   asking for advice, or general conversation
 
 Rules:
-- People speak Hindi, Punjabi and English, often mixed. Judge the meaning, not the words.
+- People speak Hindi, Punjabi, Marathi, Bengali and English, often mixed. Judge the meaning, not the words.
 - Describing a problem is NOT a navigation request. "I have fever" is NONE.
   "I have fever, I want to see a doctor" is FIND_DOCTOR.
 - If unsure, return NONE with low confidence. A wrong navigation is worse than none.

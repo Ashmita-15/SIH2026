@@ -180,9 +180,9 @@ export default function PharmacyShop() {
 
   if (loading) {
     return (
-      <PageLayout title="Loading...">
+      <PageLayout title={t('common.loading', 'Loading...')}>
         <div className="flex justify-center items-center h-64">
-          <div className="text-lg">Loading pharmacy...</div>
+          <div className="text-lg">{t('pharmacy.loadingPharmacy', 'Loading pharmacy...')}</div>
         </div>
       </PageLayout>
     )
@@ -190,9 +190,9 @@ export default function PharmacyShop() {
 
   if (!pharmacy) {
     return (
-      <PageLayout title="Pharmacy Not Found">
+      <PageLayout title={t('pharmacy.pharmacyNotFound', 'Pharmacy Not Found')}>
         <div className="text-center py-12">
-          <div className="text-muted text-lg">Pharmacy not found</div>
+          <div className="text-muted text-lg">{t('pharmacy.pharmacyNotFound', 'Pharmacy not found')}</div>
         </div>
       </PageLayout>
     )
@@ -233,10 +233,10 @@ export default function PharmacyShop() {
                   onClick={() => setShowCart(!showCart)}
                   className="btn btn-primary"
                 >
-                  Cart ({getCartItemCount()})
+                  {t('pharmacy.cart')} ({getCartItemCount()})
                 </button>
                 <p className="text-caption text-muted mt-2 tabular">
-                  Total: ₹{cart?.totalAmount || 0}
+                  {t('pharmacy.total')}: ₹{cart?.totalAmount || 0}
                 </p>
               </div>
             )}
@@ -250,7 +250,7 @@ export default function PharmacyShop() {
           <div className="bg-white w-full max-w-md h-full overflow-y-auto">
             <div className="p-4 border-b">
               <div className="flex justify-between items-center">
-                <h3 className="text-lg font-semibold">Your Cart</h3>
+                <h3 className="text-lg font-semibold">{t('pharmacy.cart')}</h3>
                 <button onClick={() => setShowCart(false)} className="text-muted text-xl">
                   ×
                 </button>
@@ -260,7 +260,7 @@ export default function PharmacyShop() {
             <div className="p-4">
               {cart.items?.length === 0 ? (
                 <div className="text-center text-muted py-8">
-                  Your cart is empty
+                  {t('pharmacy.cartEmpty', 'Your cart is empty')}
                 </div>
               ) : (
                 <>
@@ -277,7 +277,7 @@ export default function PharmacyShop() {
                             onClick={() => removeFromCart(item.medicineId._id)}
                             className="text-danger-500 text-small hover:underline"
                           >
-                            Remove
+                            {t('common.remove', 'Remove')}
                           </button>
                         </div>
                         <div className="flex items-center gap-2">
@@ -304,14 +304,14 @@ export default function PharmacyShop() {
                   
                   <div className="border-t pt-4">
                     <div className="flex justify-between items-center mb-4">
-                      <span className="font-semibold">Total: ₹{cart.totalAmount}</span>
+                      <span className="font-semibold">{t('pharmacy.total')}: ₹{cart.totalAmount}</span>
                     </div>
                     
                     <div className="space-y-2">
                       <button 
                         onClick={() => {
                           if (!cart?.items?.length || cart.items.length === 0) {
-                            toast.error('Your cart is empty!')
+                            toast.error(t('pharmacy.cartEmpty', 'Your cart is empty!'))
                             return
                           }
                           setShowCart(false)
@@ -321,10 +321,10 @@ export default function PharmacyShop() {
                         disabled={!cart?.items?.length || cart.items.length === 0}
                         className="btn btn-primary w-full"
                       >
-                        Proceed to Checkout
+                        {t('pharmacy.checkout', 'Proceed to Checkout')}
                       </button>
                       <button onClick={clearCart} className="btn btn-secondary w-full">
-                        Clear Cart
+                        {t('pharmacy.clearCart', 'Clear Cart')}
                       </button>
                     </div>
                   </div>
@@ -341,7 +341,7 @@ export default function PharmacyShop() {
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
             <input
               className="input md:col-span-2"
-              placeholder="Search medicines..."
+              placeholder={t('pharmacy.searchMedicines', 'Search medicines...')}
               value={searchTerm}
               onChange={e => {
                 setSearchTerm(e.target.value)
@@ -356,9 +356,9 @@ export default function PharmacyShop() {
                 setCurrentPage(1)
               }}
             >
-              <option value="all">All Categories</option>
+              <option value="all">{t('pharmacy.allCategories', 'All Categories')}</option>
               {categories.map(category => (
-                <option key={category} value={category}>{category}</option>
+                <option key={category} value={category}>{t(`pharmacy.categories.${category.toLowerCase()}`, category)}</option>
               ))}
             </select>
             <div className="text-small text-muted flex items-center">
@@ -436,7 +436,7 @@ export default function PharmacyShop() {
                       medicine.quantity === 0 ? 'opacity-50 cursor-not-allowed' : ''
                     }`}
                   >
-                    {medicine.quantity === 0 ? 'Out of Stock' : 'Add to Cart'}
+                    {medicine.quantity === 0 ? t('pharmacy.outOfStock') : t('pharmacy.addToCart')}
                   </button>
                 )}
               </div>
@@ -448,20 +448,20 @@ export default function PharmacyShop() {
       {loadError && medicines.length === 0 && (
         <div className="card">
           <div className="card-body text-center py-12">
-            <h3 className="card-title mb-1.5">We couldn't load the medicine list</h3>
-            <p className="text-small text-muted mb-5">Check your connection and try again.</p>
-            <button type="button" onClick={() => fetchMedicines()} className="btn btn-secondary">Try again</button>
+            <h3 className="card-title mb-1.5">{t('pharmacy.loadError')}</h3>
+            <p className="text-small text-muted mb-5">{t('pharmacy.emptyHelp')}</p>
+            <button type="button" onClick={() => fetchMedicines()} className="btn btn-secondary">{t('common.retry')}</button>
           </div>
         </div>
       )}
 
       {!loadError && medicines.length === 0 && (
         <div className="text-center py-12">
-          <div className="text-muted text-lg mb-2">No medicines found</div>
+          <div className="text-muted text-lg mb-2">{t('pharmacy.empty')}</div>
           <div className="text-muted">
             {searchTerm || categoryFilter !== 'all'
-              ? 'Try adjusting your search criteria'
-              : 'This pharmacy has no medicines listed yet'
+              ? t('pharmacy.emptyHelp')
+              : t('pharmacy.noMedicinesHelp')
             }
           </div>
         </div>
@@ -476,7 +476,7 @@ export default function PharmacyShop() {
               disabled={currentPage === 1}
               className="btn btn-secondary disabled:opacity-50"
             >
-              Previous
+              {t('common.back', 'Previous')}
             </button>
             
             <span className="flex items-center px-4">

@@ -13,16 +13,16 @@ import { generateOnce, GeminiError } from './gemini.js';
  * { text, lang } contract.
  */
 
-const LANGUAGE_NAMES = { en: 'English', hi: 'Hindi', pa: 'Punjabi' };
+const LANGUAGE_NAMES = { en: 'English', hi: 'Hindi', pa: 'Punjabi', mr: 'Marathi', bn: 'Bengali' };
 
 const INSTRUCTION = `You transcribe short voice notes from patients in rural India.
 
 Return ONLY a JSON object, no code fence, in this exact shape:
-{"text": "<what they said, word for word>", "lang": "<en|hi|pa>"}
+{"text": "<what they said, word for word>", "lang": "<en|hi|pa|mr|bn>"}
 
 Rules:
-- Transcribe verbatim in the script of the language spoken: Devanagari for Hindi, Gurmukhi for Punjabi, Latin for English.
-- People mix English words into Hindi and Punjabi. Keep those words, and set lang to the sentence's main language.
+- Transcribe verbatim in the script of the language spoken: Devanagari for Hindi and Marathi, Gurmukhi for Punjabi, Bengali script for Bengali, Latin for English.
+- People mix English words into Hindi, Punjabi, Marathi and Bengali. Keep those words, and set lang to the sentence's main language.
 - If the audio is silent or unintelligible, return {"text": "", "lang": "en"}.
 - Never answer the question, explain, or add anything the speaker did not say.`;
 

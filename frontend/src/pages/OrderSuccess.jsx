@@ -42,9 +42,9 @@ export default function OrderSuccess() {
 
   if (loading) {
     return (
-      <PageLayout title="Order Confirmation">
+      <PageLayout title={t('checkout.orderSummary', 'Order Confirmation')}>
         <div className="flex justify-center items-center h-64">
-          <div className="text-lg">Loading order details...</div>
+          <div className="text-lg">{t('common.loading', 'Loading order details...')}</div>
         </div>
       </PageLayout>
     )
@@ -52,29 +52,29 @@ export default function OrderSuccess() {
 
   if (!order) {
     return (
-      <PageLayout title="Order Not Found">
+      <PageLayout title={t('errors.notFoundTitle', 'Order Not Found')}>
         <div className="text-center py-12">
-          <div className="text-muted text-lg mb-4">Order not found</div>
-          <Link to="/patient" className="btn btn-primary">Back to Dashboard</Link>
+          <div className="text-muted text-lg mb-4">{t('pharmacy.orders.empty', 'Order not found')}</div>
+          <Link to="/patient" className="btn btn-primary">{t('errors.backHome', 'Back to Dashboard')}</Link>
         </div>
       </PageLayout>
     )
   }
 
   return (
-    <PageLayout title="Order Placed Successfully! 🎉">
+    <PageLayout title={t('status.order.confirmed')}>
       <div className="max-w-4xl mx-auto space-y-6">
         
         {/* Success Message */}
         <div className="card bg-success-50 border-success-100">
           <div className="card-body text-center">
             <div className="text-6xl mb-4">✅</div>
-            <h2 className="text-2xl font-bold text-success-600 mb-2">Order Placed Successfully!</h2>
+            <h2 className="text-2xl font-bold text-success-600 mb-2">{t('status.order.confirmed')}</h2>
             <p className="text-success-600 mb-4">
-              Your order has been confirmed and sent to the pharmacy for processing.
+              {t('booking.booked')}
             </p>
             <div className="text-lg font-semibold text-success-600">
-              Order ID: {order.orderId}
+              {t('checkout.orderSummary')}: {order.orderId}
             </div>
           </div>
         </div>
@@ -85,27 +85,27 @@ export default function OrderSuccess() {
           {/* Order Information */}
           <div className="card">
             <div className="card-body">
-              <h3 className="section-title mb-4">Order Information</h3>
+              <h3 className="section-title mb-4">{t('checkout.orderSummary')}</h3>
               <div className="space-y-3">
                 <div className="flex justify-between">
-                  <span className="font-medium">Order ID:</span>
+                  <span className="font-medium">{t('checkout.orderSummary')}:</span>
                   <span className="font-mono">{order.orderId}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="font-medium">Status:</span>
+                  <span className="font-medium">{t('appointments.type')}:</span>
                   <Badge tone={orderStatus(order.status, t).tone}>{orderStatus(order.status, t).label}</Badge>
                 </div>
                 <div className="flex justify-between">
-                  <span className="font-medium">Order Type:</span>
-                  <span className="capitalize">{order.orderType}</span>
+                  <span className="font-medium">{t('checkout.orderType')}:</span>
+                  <span className="capitalize">{order.orderType === 'delivery' ? t('checkout.delivery') : t('checkout.pickup')}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="font-medium">Order Date:</span>
+                  <span className="font-medium">{t('appointments.requestedOn')}:</span>
                   <span>{new Date(order.createdAt).toLocaleDateString()}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="font-medium">Payment Method:</span>
-                  <span>Cash on {order.orderType === 'delivery' ? 'Delivery' : 'Pickup'}</span>
+                  <span className="font-medium">{t('checkout.paymentMethod')}:</span>
+                  <span>{t('checkout.cod')}</span>
                 </div>
               </div>
             </div>
@@ -114,7 +114,7 @@ export default function OrderSuccess() {
           {/* Pharmacy Information */}
           <div className="card">
             <div className="card-body">
-              <h3 className="section-title mb-4">Pharmacy Details</h3>
+              <h3 className="section-title mb-4">{t('hospital.pharmacies')}</h3>
               <div className="space-y-2">
                 <div className="font-semibold">{order.pharmacyId?.name}</div>
                 <div className="text-small text-muted">
@@ -131,14 +131,14 @@ export default function OrderSuccess() {
         {/* Order Items */}
         <div className="card">
           <div className="card-body">
-            <h3 className="section-title mb-4">Order Items</h3>
+            <h3 className="section-title mb-4">{t('pharmacy.medicines')}</h3>
             <div className="space-y-3">
               {order.items?.map((item, index) => (
                 <div key={index} className="flex justify-between items-center p-3 bg-surface-2 rounded-lg">
                   <div className="flex-1">
                     <div className="font-medium">{item.medicineName}</div>
                     <div className="text-small text-muted">
-                      Quantity: {item.quantity} × ₹{item.finalPrice}
+                      {item.quantity} × ₹{item.finalPrice}
                     </div>
                   </div>
                   <div className="font-semibold">₹{item.total}</div>
@@ -151,20 +151,10 @@ export default function OrderSuccess() {
         {/* Billing Details */}
         <div className="card">
           <div className="card-body">
-            <h3 className="section-title mb-4">Billing Details</h3>
+            <h3 className="section-title mb-4">{t('checkout.orderSummary')}</h3>
             <div className="space-y-2">
-              <div className="flex justify-between">
-                <span>Subtotal:</span>
-                <span>₹{order.totalAmount - (order.deliveryFee || 0)}</span>
-              </div>
-              {order.deliveryFee > 0 && (
-                <div className="flex justify-between">
-                  <span>Delivery Fee:</span>
-                  <span>₹{order.deliveryFee}</span>
-                </div>
-              )}
               <div className="flex justify-between font-semibold text-lg border-t pt-2">
-                <span>Total Amount:</span>
+                <span>{t('pharmacy.total')}:</span>
                 <span>₹{order.totalAmount}</span>
               </div>
             </div>
@@ -175,7 +165,7 @@ export default function OrderSuccess() {
         {order.orderType === 'delivery' && order.deliveryAddress ? (
           <div className="card">
             <div className="card-body">
-              <h3 className="section-title mb-4">Delivery Address</h3>
+              <h3 className="section-title mb-4">{t('checkout.deliveryAddress')}</h3>
               <div className="text-body">
                 <div className="font-medium">{order.deliveryAddress.name}</div>
                 <div>{order.deliveryAddress.phone}</div>
@@ -184,22 +174,15 @@ export default function OrderSuccess() {
                 <div>{order.deliveryAddress.city}, {order.deliveryAddress.state} - {order.deliveryAddress.pincode}</div>
                 {order.deliveryAddress.landmark && <div>Near {order.deliveryAddress.landmark}</div>}
               </div>
-              {order.estimatedDelivery && (
-                <div className="mt-4 p-3 bg-info-50 rounded-lg">
-                  <div className="text-info-600 font-medium">
-                    🚚 Estimated Delivery: {new Date(order.estimatedDelivery).toLocaleDateString()}
-                  </div>
-                </div>
-              )}
             </div>
           </div>
         ) : (
           <div className="card">
             <div className="card-body">
-              <h3 className="section-title mb-4">Pickup Information</h3>
+              <h3 className="section-title mb-4">{t('checkout.pickupAddress')}</h3>
               <div className="p-3 bg-warning-50 rounded-lg">
                 <div className="text-warning-600 font-medium mb-2">
-                  🏪 Please collect your order from:
+                  🏪 {t('checkout.collectFrom', { name: order.pharmacyId?.name || '' })}:
                 </div>
                 <div className="text-warning-600">
                   <div className="font-medium">{order.pharmacyId?.name}</div>
@@ -218,10 +201,9 @@ export default function OrderSuccess() {
               <div className="flex items-start space-x-3">
                 <div className="text-2xl">⚠️</div>
                 <div>
-                  <h4 className="font-semibold text-warning-600 mb-2">Prescription Required</h4>
+                  <h4 className="font-semibold text-warning-600 mb-2">{t('pharmacy.prescriptionRequired')}</h4>
                   <p className="text-warning-600 text-small">
-                    Please have your valid prescription ready for verification 
-                    {order.orderType === 'delivery' ? ' at the time of delivery' : ' when collecting from the pharmacy'}.
+                    {t('checkout.prescriptionHelp')}
                   </p>
                 </div>
               </div>
@@ -232,10 +214,10 @@ export default function OrderSuccess() {
         {/* Action Buttons */}
         <div className="flex gap-4 justify-center">
           <Link to="/patient" className="btn btn-primary">
-            Back to Dashboard
+            {t('errors.backHome')}
           </Link>
           <Link to="/patient/medicine" className="btn btn-secondary">
-            Continue Shopping
+            {t('checkout.backToShop')}
           </Link>
         </div>
 

@@ -51,14 +51,15 @@ export default function AppShell({ badges = {}, children }) {
       </DropdownItem>
       <div className="px-2 py-1.5">
         <p className="px-2 pb-1.5 text-caption text-muted">{t('navbar.language')}</p>
-        <div className="flex gap-1">
+        <div className="grid grid-cols-5 gap-1">
           {LANGUAGES.map(l => (
             <button
               key={l.code}
               type="button"
               onClick={() => i18n.changeLanguage(l.code)}
               aria-pressed={i18n.language === l.code}
-              className={`flex-1 px-2 py-2 rounded-control text-caption font-medium transition-colors ${
+              title={l.native}
+              className={`px-1 py-1.5 rounded-control text-caption font-medium transition-colors text-center truncate ${
                 i18n.language === l.code ? 'bg-primary-600 text-white' : 'bg-surface-2 text-body hover:bg-line-soft'
               }`}
             >
