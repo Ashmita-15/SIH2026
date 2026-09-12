@@ -19,7 +19,8 @@ export const ICONS = {
   orders:    'M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M17 17a2 2 0 100 4 2 2 0 000-4zM9 17a2 2 0 100 4 2 2 0 000-4z',
   building:  'M4 21V8l8-5 8 5v13M9 21v-6h6v6M12 10v3m-1.5-1.5h3',
   shop:      'M4 8h16l-1 12H5L4 8zM9 8V6a3 3 0 016 0v2',
-  profile:   'M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z'
+  profile:   'M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z',
+  nearby:    'M17.657 16.657L13.414 20.9a2 2 0 01-2.828 0l-4.243-4.243a8 8 0 1111.314 0zM15 11a3 3 0 11-6 0 3 3 0 016 0z'
 }
 
 const NAV = {
@@ -27,7 +28,8 @@ const NAV = {
     { key: 'home',     to: '/patient',          icon: ICONS.home,     labelKey: 'nav.patient.home',     end: true },
     { key: 'care',     to: '/patient/care',     icon: ICONS.care,     labelKey: 'nav.patient.care' },
     { key: 'records',  to: '/patient/records',  icon: ICONS.records,  labelKey: 'nav.patient.records' },
-    { key: 'medicine', to: '/patient/medicine', icon: ICONS.medicine, labelKey: 'nav.patient.medicine' }
+    { key: 'medicine', to: '/patient/medicine', icon: ICONS.medicine, labelKey: 'nav.patient.medicine' },
+    { key: 'nearby',   to: '/patient/nearby',   icon: ICONS.nearby,   labelKey: 'nav.patient.nearby' }
   ],
   doctor: [
     { key: 'today',        to: '/doctor',              icon: ICONS.today,    labelKey: 'nav.doctor.today', end: true },

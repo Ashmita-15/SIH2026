@@ -653,7 +653,8 @@
       "care": "Care",
       "records": "Records",
       "medicine": "Medicine",
-      "orders": "My orders"
+      "orders": "My orders",
+      "nearby": "Nearby"
     },
     "doctor": {
       "today": "Today",
@@ -992,6 +993,28 @@
     },
     "book": "Book an appointment",
     "disclaimer": "This is guidance to help you decide when to be seen. It is not a diagnosis."
+  },
+  "nearby": {
+    "title": "Find nearby",
+    "subtitle": "Locate doctors, pharmacies and hospitals near you.",
+    "detectLocation": "Detect my location",
+    "detecting": "Detecting…",
+    "enterAddress": "Search for a place…",
+    "confirmLocation": "Use this location",
+    "changeLocation": "Change location",
+    "findDoctor": "Doctors",
+    "findPharmacy": "Pharmacies",
+    "findHospital": "Hospitals",
+    "searchPrompt": "What are you looking for?",
+    "searching": "Searching nearby…",
+    "results_one": "{{count}} result",
+    "results_other": "{{count}} results",
+    "noResults": "Nothing found nearby. Try a wider area or a different category.",
+    "walkingDistance": "{{distance}} walk",
+    "back": "Back to results",
+    "showRoute": "Show route",
+    "locationError": "Couldn't detect your location. Please allow location access or enter an address manually.",
+    "dragHint": "Drag the marker to adjust your location"
   },
   "language": {
     "gateTitle": "Choose your language",

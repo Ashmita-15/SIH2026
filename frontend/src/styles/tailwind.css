@@ -262,6 +262,16 @@
   /* ---------- Misc ---------- */
   .divider { @apply h-px bg-line-soft; }
   .link { @apply text-primary-600 hover:text-primary-500 underline underline-offset-2; }
+
+  /* ---------- Leaflet overrides ---------- */
+  .leaflet-container { font-family: inherit; }
+  .leaflet-control-zoom a {
+    @apply !bg-surface !text-ink border !border-line hover:!bg-surface-2;
+  }
+  .leaflet-popup-content-wrapper {
+    @apply !bg-surface !shadow-raised !rounded-card border !border-line;
+  }
+  .leaflet-popup-tip { @apply !bg-surface; }
 }
 
 @layer utilities {

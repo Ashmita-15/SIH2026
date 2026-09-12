@@ -23,6 +23,7 @@ import { Loading } from '../components/ui/States'
 import NotificationsPage from './NotificationsPage'
 
 const VideoCall = lazy(() => import('../components/VideoCall'))
+const NearbyPage = lazy(() => import('../components/patient/NearbyPage'))
 
 export default function PatientDashboard() {
   return (
@@ -47,6 +48,8 @@ export default function PatientDashboard() {
       <Route path="medicine/orders/:orderId" element={<OrderSuccess />} />
       <Route path="medicine/:pharmacyId" element={<PharmacyShop />} />
       <Route path="medicine/:pharmacyId/checkout" element={<CheckoutPage />} />
+
+      <Route path="nearby" element={<NearbyRoute />} />
 
       <Route path="profile" element={<ProfileRoute />} />
 
@@ -182,6 +185,17 @@ function DiagnosticsRoute() {
   return (
     <Page title={t('diagnostics.title')} description={t('diagnostics.subtitle')}>
       <MyDiagnostics />
+    </Page>
+  )
+}
+
+function NearbyRoute() {
+  const { t } = useTranslation()
+  return (
+    <Page title={t('nearby.title')} description={t('nearby.subtitle')}>
+      <Suspense fallback={<Loading className="py-24" />}>
+        <NearbyPage />
+      </Suspense>
     </Page>
   )
 }
