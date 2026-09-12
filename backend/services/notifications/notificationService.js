@@ -189,7 +189,17 @@ export async function notifyDoctorSessionSchedule({ doctor, facilityName, date, 
     return sendMail({ to: doctor.email, ...mail });
 }
 
+/** A finished test, told to the patient who was waiting for it. */
+export async function notifyDiagnosticCompleted({ patient, testName, resultSummary, facilityName }) {
+    if (!patient?.email) return { sent: false, reason: 'no_recipient' };
+    const mail = templates.diagnosticCompletedEmail({
+        patientName: patient.name, testName, resultSummary, facilityName
+    });
+    return sendMail({ to: patient.email, ...mail });
+}
+
 export default {
+    notifyDiagnosticCompleted,
     notifyQueueFinalized,
     notifyDoctorSessionSchedule,
     notifyAccountCreated,

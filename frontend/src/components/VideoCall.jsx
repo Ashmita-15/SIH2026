@@ -67,7 +67,13 @@ export default function VideoCall({ roomId, perspective = 'patient', onLeave }) 
 
   const endCall = async () => {
     try {
-      if (roomId && connected) await api.put(`/appointments/${roomId}/complete`)
+      if (roomId && perspective === 'doctor') {
+        await api.put(`/appointments/${roomId}/complete`)
+        window.dispatchEvent(new CustomEvent('appointments:changed'))
+      }
+      if (roomId && socketRef.current) {
+        socketRef.current.emit('call-ended', roomId)
+      }
     } catch (err) {
       console.error('Could not mark the appointment complete:', err)
     } finally {
@@ -126,7 +132,7 @@ export default function VideoCall({ roomId, perspective = 'patient', onLeave }) 
           else { try { peerRef.current.signal(data) } catch (err) { console.error('Signal failed:', err) } }
         })
 
-        socket.on('call-ended', () => { setConnected(false); cleanup(); onLeave?.() })
+        socket.on('call-ended', () => { setConnected(false); cleanup(); window.dispatchEvent(new CustomEvent('appointments:changed')); onLeave?.() })
         socket.on('disconnect', () => setConnected(false))
       } catch (err) {
         console.error('Could not start the call:', err)
@@ -163,6 +169,16 @@ export default function VideoCall({ roomId, perspective = 'patient', onLeave }) 
           <Alert tone="error">{error}</Alert>
           <div className="flex flex-col sm:flex-row gap-2">
             <Button onClick={() => window.location.reload()}>{t('common.retry')}</Button>
+            {/**
+              * A consultation that happened has to be closable even when the
+              * video never did. Without this the doctor's only way out of a
+              * failed call is Leave, which ends the screen and leaves the
+              * appointment confirmed forever — so it never reaches the past
+              * list and never leaves the queue.
+              */}
+            {perspective === 'doctor' && (
+              <Button variant="danger" onClick={endCall}>{t('consultation.endCall')}</Button>
+            )}
             <Button variant="secondary" onClick={() => { cleanup(); onLeave?.() }}>{t('consultation.leave')}</Button>
           </div>
         </CardBody>

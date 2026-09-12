@@ -81,11 +81,26 @@ export default function BookingForm({ selectedDoctor: doctorFromProps, prefillSy
   useEffect(() => {
     if (!selectedDoctor?._id) { setSessionMode(null); return }
     let cancelled = false
+
+    const hasActiveSessionsInProp = Array.isArray(selectedDoctor.sessions) && selectedDoctor.sessions.some(s => s.active !== false)
+    if (hasActiveSessionsInProp) {
+      setSessionMode(true)
+    }
+
     api.get(`/sessions/doctor/${selectedDoctor._id}`, { params: { date: toISODate(new Date()) } })
-      .then(({ data }) => { if (!cancelled) setSessionMode(Number(data?.configured) > 0) })
-      .catch(() => { if (!cancelled) setSessionMode(false) })
+      .then(({ data }) => {
+        if (!cancelled) {
+          const isConfigured = Number(data?.configured) > 0 || (Array.isArray(data?.sessions) && data.sessions.length > 0)
+          setSessionMode(Boolean(isConfigured || hasActiveSessionsInProp))
+        }
+      })
+      .catch(() => {
+        if (!cancelled && !hasActiveSessionsInProp) {
+          setSessionMode(false)
+        }
+      })
     return () => { cancelled = true }
-  }, [selectedDoctor?._id])
+  }, [selectedDoctor])
 
   // Always release camera and microphone, even if the user navigates away
   // mid-recording.

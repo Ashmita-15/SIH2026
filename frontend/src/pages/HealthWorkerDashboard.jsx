@@ -917,6 +917,62 @@ const PRIORITIES = [
 
 const TRANSPORT = [['own', 'Can travel themselves'], ['escort', 'Needs someone with them'], ['ambulance', 'Needs an ambulance']]
 
+const PRIORITY_LABEL = Object.fromEntries(PRIORITIES)
+
+const ago = (iso) => {
+  const mins = Math.round((Date.now() - new Date(iso).getTime()) / 60000)
+  if (mins < 1) return 'just now'
+  if (mins < 60) return `${mins} min ago`
+  const hrs = Math.round(mins / 60)
+  if (hrs < 24) return `${hrs} hour${hrs === 1 ? '' : 's'} ago`
+  const days = Math.round(hrs / 24)
+  return `${days} day${days === 1 ? '' : 's'} ago`
+}
+
+/**
+ * What the patient said about themselves, offered to the worker filling this in.
+ *
+ * It is shown, never applied. The urgency of a referral is a clinical
+ * judgement made by the person who has actually seen the patient, and a
+ * self-report from a chat window is not a substitute for that — so this puts
+ * the information on screen and stops. Pressing the button is the human
+ * deciding, which is the whole point of the button existing.
+ *
+ * Hidden entirely when there is nothing to say, when the grading produced no
+ * priority, or when the report is old enough that acting on it would be
+ * guessing.
+ */
+function TriageSuggestion({ assessment, current, onUse }) {
+  if (!assessment?.referralPriority || assessment.stale) return null
+
+  const suggested = assessment.referralPriority
+  const matches = suggested === current
+
+  return (
+    <Alert tone={suggested === 'emergency' || suggested === 'urgent_24h' ? 'warning' : 'info'}
+           title={`Patient reported symptoms ${ago(assessment.createdAt)}`}
+           action={matches ? null : (
+             <Button type="button" size="sm" variant="ghost" onClick={() => onUse(suggested)}>
+               Use this
+             </Button>
+           )}>
+      <p>
+        Their own description suggests <strong>{PRIORITY_LABEL[suggested] || niceLabel(suggested)}</strong>
+        {assessment.symptoms?.length ? <> — {assessment.symptoms.map(niceLabel).join(', ')}</> : null}
+        {Number.isFinite(assessment.durationDays)
+          ? <>, for {assessment.durationDays} day{assessment.durationDays === 1 ? '' : 's'}</>
+          : null}
+        {assessment.pregnant ? <>, pregnant</> : null}.
+      </p>
+      <p className="text-xs opacity-80 mt-1">
+        {matches
+          ? 'This matches what you have selected.'
+          : 'Self-reported, not an assessment. Your judgement decides the priority.'}
+      </p>
+    </Alert>
+  )
+}
+
 /**
  * Sending a patient somewhere that can help.
  *
@@ -939,6 +995,22 @@ function ReferPatient({ patient, visits, facilityId, onClose, onDone }) {
   })
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
+
+  /**
+   * What the patient already told the assistant, if anything.
+   *
+   * Fetched rather than passed down because most patients have no assessment
+   * and the form must look identical for them — a failed or empty fetch simply
+   * leaves the banner off.
+   */
+  const [triage, setTriage] = useState(null)
+  useEffect(() => {
+    let cancelled = false
+    api.get(`/triage/latest/${patient._id}`)
+      .then(({ data }) => { if (!cancelled) setTriage(data?.assessment || null) })
+      .catch(() => {})
+    return () => { cancelled = true }
+  }, [patient._id])
 
   const set = (k) => (e) => setForm(f => ({ ...f, [k]: e.target.value }))
 
@@ -969,6 +1041,9 @@ function ReferPatient({ patient, visits, facilityId, onClose, onDone }) {
           {() => <FacilityPicker value={form.toFacilityId} excludeId={facilityId}
                                  onChange={(id) => setForm(f => ({ ...f, toFacilityId: id }))} />}
         </Field>
+
+        <TriageSuggestion assessment={triage} current={form.priority}
+                          onUse={(p) => setForm(f => ({ ...f, priority: p }))} />
 
         <div className="grid grid-cols-2 gap-3">
           <Field label="How urgent" required>

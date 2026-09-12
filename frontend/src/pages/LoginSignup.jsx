@@ -262,7 +262,7 @@ export default function LoginSignup() {
               <Field label={t('auth.email')} error={errors.email} required>
                 {(props) => (
                   <Input
-                    {...props} type="email" inputMode="email" autoComplete="email"
+                    {...props} type="email" name="email" inputMode="email" autoComplete="email"
                     autoCapitalize="none" spellCheck="false"
                     placeholder={t('auth.emailPlaceholder')}
                     value={form.email || ''} onChange={set('email')} error={errors.email}
@@ -279,6 +279,7 @@ export default function LoginSignup() {
                 {(props) => (
                   <PasswordInput
                     {...props}
+                    name="password"
                     autoComplete={isLogin ? 'current-password' : 'new-password'}
                     label={t('auth.showPassword')}
                     value={form.password || ''} onChange={set('password')} error={errors.password}
