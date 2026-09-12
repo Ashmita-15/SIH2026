@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react'
 import { Routes, Route, Navigate, useNavigate, useParams } from 'react-router-dom'
+import NotificationsPage from './NotificationsPage'
 import { useTranslation } from 'react-i18next'
 import ReferralDetail, { STATUS_TONE } from '../components/referral/ReferralDetail'
 import CoordinationPanel from '../components/agents/CoordinationPanel'
@@ -37,6 +38,7 @@ export default function HospitalDashboard() {
       <Route path="staff" element={<HealthWorkerStaff />} />
       <Route path="referrals" element={<ReferralInbox />} />
       <Route path="referrals/:referralId" element={<FacilityReferralDetail />} />
+      <Route path="notifications" element={<NotificationsPage />} />
       <Route path="*" element={<Navigate to="/hospital" replace />} />
     </Routes>
   )

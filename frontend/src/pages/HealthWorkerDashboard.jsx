@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useCallback } from 'react'
 import { Routes, Route, Navigate, useNavigate, useParams } from 'react-router-dom'
+import NotificationsPage from './NotificationsPage'
 import Page from '../components/app/Page'
 import VideoCall from '../components/VideoCall'
 import Worklist from '../components/healthWorker/Worklist'
@@ -46,6 +47,7 @@ export default function HealthWorkerDashboard() {
       <Route path="referrals" element={<WorkerReferrals />} />
       <Route path="referrals/:referralId" element={<WorkerReferralDetail />} />
       <Route path="profile" element={<Overview profile={profile} />} />
+      <Route path="notifications" element={<NotificationsPage />} />
       <Route path="*" element={<Navigate to="/health-worker" replace />} />
     </Routes>
   )

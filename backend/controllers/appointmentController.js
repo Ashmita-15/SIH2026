@@ -8,6 +8,7 @@ import {
     notifyAppointmentConfirmed,
     notifyAppointmentRejected,
     notifyAppointmentCancelled,
+    notifyAppointmentCompleted,
     notifyQueueStatus
 } from '../services/notifications/notificationService.js';
 /**
@@ -390,6 +391,12 @@ export const completeAppointment = async (req, res) => {
             message: 'Appointment marked as completed',
             appointment
         });
+        // Notify patient that their consultation record is now available
+        notifyAppointmentCompleted({
+            patient: appointment.patientId,
+            doctor: appointment.doctorId,
+            appointment
+        }).catch(() => {});
     } catch (e) {
         res.status(500).json({ message: e.message });
     }

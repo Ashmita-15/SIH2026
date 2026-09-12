@@ -1,34 +1,130 @@
 import { sendMail } from './mailer.js';
 import { sendPushToUser, sendPushToUsers } from './pushService.js';
 import * as templates from './emailTemplates.js';
+import Notification from '../../models/Notification.js';
 
 /**
  * Unified Notification Service for GramSathi.
  *
- * Coordinates multi-channel notifications across Web Push and Email.
+ * Architecture:
+ *   Business Event → createNotification() → MongoDB + Web Push
  *
  * Design Principles:
- * 1. Failure isolation: Push failure does not break Email; Email failure does not break Push.
- * 2. Non-blocking: Notifications are fire-and-forget or executed asynchronously; a notification
- *    failure never aborts the underlying medical transaction (appointment, record, order).
- * 3. Healthcare security & privacy: Push notifications convey essential actionable updates
- *    without exposing sensitive diagnoses, test results, or prescription details in notification banners.
+ * 1. createNotification() is the SINGLE entry point for all notification creation.
+ * 2. Failure isolation: Push failure does not break DB save; DB failure does not break push.
+ * 3. Non-blocking: Notification failures never abort the underlying medical transaction.
+ * 4. Healthcare security & privacy: Push bodies never expose diagnoses, lab values, or drug names.
+ * 5. Deduplication: same (userId, type, entityId) within 5 minutes = skip duplicate creation.
  */
 
-// ─── Unified Multi-Channel Dispatch ──────────────────────────────────────────
+// ─── Central Notification Creator ────────────────────────────────────────────
+
+/**
+ * Creates a persistent in-app notification AND attempts Web Push delivery.
+ *
+ * @param {Object} params
+ * @param {string|mongoose.Types.ObjectId} params.userId  - Target user ID (required)
+ * @param {string} params.type        - NOTIFICATION_TYPE enum value
+ * @param {string} params.title       - Short notification title
+ * @param {string} params.body        - Privacy-safe preview body
+ * @param {Object} [params.data]      - Metadata for SW/navigation { url, entityId, entityType }
+ * @param {string} [params.link]      - Deep link for in-app navigation (HashRouter: "/#/path")
+ * @param {string} [params.priority]  - 'urgent' | 'high' | 'normal' | 'low'
+ * @param {string} [params.entityType] - 'appointment' | 'order' | 'diagnostic' | ...
+ * @param {string} [params.entityId]  - MongoDB ID of the related entity (for dedup)
+ * @param {string} [params.tag]       - Web Push tag for deduplication on device
+ * @returns {Promise<Notification|null>}
+ */
+export async function createNotification({
+    userId,
+    type = 'GENERAL',
+    title,
+    body,
+    data = {},
+    link = '/',
+    priority = 'normal',
+    entityType = 'general',
+    entityId = null,
+    tag = null
+}) {
+    if (!userId || !title || !body) {
+        console.warn('[notificationService] createNotification called with missing required fields:', { userId, title, body });
+        return null;
+    }
+
+    // ── Deduplication: same (userId, type, entityId) within 5 minutes ──
+    if (entityId && type !== 'GENERAL') {
+        try {
+            const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000);
+            const existing = await Notification.findOne({
+                userId,
+                type,
+                entityId: String(entityId),
+                createdAt: { $gte: fiveMinutesAgo }
+            }).select('_id').lean();
+
+            if (existing) {
+                console.debug(`[notificationService] Skipping duplicate: ${type} for entity ${entityId} (userId ${userId})`);
+                return null;
+            }
+        } catch (dedupErr) {
+            console.error('[notificationService] Dedup check failed:', dedupErr.message);
+            // Continue — better a duplicate than a missed notification
+        }
+    }
+
+    // ── 1. Persist to MongoDB ──
+    let notification = null;
+    try {
+        notification = await Notification.create({
+            userId,
+            type,
+            title,
+            body,
+            data,
+            link,
+            priority,
+            entityType,
+            entityId: entityId ? String(entityId) : null,
+            pushSent: false
+        });
+    } catch (dbErr) {
+        console.error('[notificationService] Failed to save notification:', dbErr.message);
+        // Continue with push attempt even if DB save failed
+    }
+
+    // ── 2. Attempt Web Push delivery (fire-and-forget, never throws) ──
+    sendPushToUser(userId, {
+        title,
+        body,
+        tag: tag || `gramsathi-${type}-${entityId || Date.now()}`,
+        data: {
+            url: link,
+            type,
+            entityId: entityId ? String(entityId) : null,
+            entityType,
+            notificationId: notification ? String(notification._id) : null,
+            ...data
+        }
+    }).then(result => {
+        if (notification && result.sent > 0) {
+            Notification.findByIdAndUpdate(notification._id, {
+                pushSent: true,
+                pushSentAt: new Date()
+            }).catch(() => {});
+        }
+    }).catch(pushErr => {
+        console.error(`[notificationService/push] Push failed for user ${userId}:`, pushErr.message);
+    });
+
+    return notification;
+}
+
+// ─── Unified Multi-Channel Dispatch (legacy-compatible) ──────────────────────
 
 /**
  * Sends a notification across requested channels (push, email).
- *
- * @param {Object} params
- * @param {string|mongoose.Types.ObjectId} [params.userId] - Target user ID (for push)
- * @param {string} [params.email] - Target email address (for email)
- * @param {string} params.type - Event category
- * @param {string} params.title - Notification title
- * @param {string} params.body - Safe preview body
- * @param {Object} [params.data] - Custom payload for service worker / client navigation
- * @param {Array<'push'|'email'>} [params.channels] - Channels to dispatch through
- * @param {Object} [params.emailContent] - Optional { subject, html, text }
+ * Kept for backward-compatibility; prefer createNotification() for new code.
  */
 export async function sendNotification({
     userId,
@@ -42,17 +138,13 @@ export async function sendNotification({
 }) {
     const promises = [];
 
-    // Push notification channel
     if (channels.includes('push') && userId) {
         promises.push(
             sendPushToUser(userId, {
                 title,
                 body,
                 tag: `gramsathi-${type}-${data.entityId || Date.now()}`,
-                data: {
-                    type,
-                    ...data
-                }
+                data: { type, ...data }
             }).catch(err => {
                 console.error(`[notificationService/push] Failed for user ${userId}:`, err.message);
                 return { sent: 0, failed: 1, reason: err.message };
@@ -60,7 +152,6 @@ export async function sendNotification({
         );
     }
 
-    // Email channel
     if (channels.includes('email') && email && emailContent) {
         promises.push(
             sendMail({
@@ -75,8 +166,7 @@ export async function sendNotification({
         );
     }
 
-    const results = await Promise.allSettled(promises);
-    return results;
+    return Promise.allSettled(promises);
 }
 
 // ─── Account Events ──────────────────────────────────────────────────────────
@@ -85,34 +175,65 @@ export async function notifyAccountCreated(user) {
     if (!user) return;
     const userId = user._id || user.id;
 
-    const emailJob = user.email
-        ? sendMail({
-            to: user.email,
-            ...templates.accountCreatedEmail({ name: user.name, role: user.role })
-        }).catch(() => {})
-        : Promise.resolve();
-
-    const pushJob = userId
-        ? sendPushToUser(userId, {
+    // In-app + Push via createNotification
+    if (userId) {
+        createNotification({
+            userId,
+            type: 'ACCOUNT_CREATED',
             title: 'Welcome to GramSathi',
             body: 'Your GramSathi account is ready. Access doctors, records, and prescriptions anytime.',
-            tag: 'gramsathi-account-created',
-            data: { url: '/', type: 'account_created' }
-        }).catch(() => {})
-        : Promise.resolve();
+            link: '/',
+            entityType: 'account'
+        }).catch(() => {});
+    }
 
-    return Promise.allSettled([emailJob, pushJob]);
+    // Email (fire-and-forget)
+    if (user.email) {
+        sendMail({
+            to: user.email,
+            ...templates.accountCreatedEmail({ name: user.name, role: user.role })
+        }).catch(() => {});
+    }
 }
 
-// ─── Appointments ───────────────────────────────────────────────────────────
+// ─── Appointments ────────────────────────────────────────────────────────────
 
 /** Sent to both the patient and the doctor upon booking. */
 export async function notifyAppointmentBooked({ patient, doctor, appointment }) {
     const jobs = [];
     const patientId = patient?._id || patient?.id || appointment?.patientId;
     const doctorId = doctor?._id || doctor?.id || appointment?.doctorId;
+    const appointmentId = appointment?._id;
 
-    // Patient email + push
+    // Patient: in-app + push
+    if (patientId) {
+        jobs.push(createNotification({
+            userId: patientId,
+            type: 'APPOINTMENT_BOOKED',
+            title: 'Appointment Request Submitted',
+            body: `Your consultation request with Dr. ${doctor?.name || 'the doctor'} has been placed. Awaiting confirmation.`,
+            link: '/#/patient/appointments',
+            entityType: 'appointment',
+            entityId: appointmentId ? String(appointmentId) : null,
+            data: { appointmentId: String(appointmentId || '') }
+        }).catch(() => {}));
+    }
+
+    // Doctor: in-app + push
+    if (doctorId) {
+        jobs.push(createNotification({
+            userId: doctorId,
+            type: 'APPOINTMENT_BOOKED',
+            title: 'New Consultation Request',
+            body: `You have a new appointment request from ${patient?.name || 'a patient'} to review.`,
+            link: '/#/doctor/today',
+            entityType: 'appointment',
+            entityId: appointmentId ? String(appointmentId) : null,
+            data: { appointmentId: String(appointmentId || '') }
+        }).catch(() => {}));
+    }
+
+    // Patient email
     if (patient?.email) {
         const { subject, html } = templates.appointmentBookedPatientEmail({
             patientName: patient.name,
@@ -123,22 +244,8 @@ export async function notifyAppointmentBooked({ patient, doctor, appointment }) 
         });
         jobs.push(sendMail({ to: patient.email, subject, html }).catch(() => {}));
     }
-    if (patientId) {
-        jobs.push(
-            sendPushToUser(patientId, {
-                title: 'Appointment Request Submitted',
-                body: `Your consultation request with Dr. ${doctor?.name || 'the doctor'} has been placed.`,
-                tag: `appointment-${appointment?._id}`,
-                data: {
-                    url: '/patient/appointments',
-                    type: 'appointment_booked',
-                    appointmentId: String(appointment?._id || '')
-                }
-            }).catch(() => {})
-        );
-    }
 
-    // Doctor email + push
+    // Doctor email
     if (doctor?.email) {
         const { subject, html } = templates.appointmentBookedDoctorEmail({
             doctorName: doctor.name,
@@ -148,20 +255,6 @@ export async function notifyAppointmentBooked({ patient, doctor, appointment }) 
         });
         jobs.push(sendMail({ to: doctor.email, subject, html }).catch(() => {}));
     }
-    if (doctorId) {
-        jobs.push(
-            sendPushToUser(doctorId, {
-                title: 'New Consultation Request',
-                body: `You have a new appointment booking request to review (${patient?.name || 'Patient'}).`,
-                tag: `appointment-review-${appointment?._id}`,
-                data: {
-                    url: '/doctor/today',
-                    type: 'appointment_review',
-                    appointmentId: String(appointment?._id || '')
-                }
-            }).catch(() => {})
-        );
-    }
 
     return Promise.allSettled(jobs);
 }
@@ -170,6 +263,21 @@ export async function notifyAppointmentBooked({ patient, doctor, appointment }) 
 export async function notifyAppointmentConfirmed({ patient, doctor, appointment, queueInfo }) {
     const jobs = [];
     const patientId = patient?._id || patient?.id || appointment?.patientId;
+    const appointmentId = appointment?._id;
+
+    if (patientId) {
+        jobs.push(createNotification({
+            userId: patientId,
+            type: 'APPOINTMENT_CONFIRMED',
+            title: 'Appointment Confirmed',
+            body: `Your appointment with Dr. ${doctor?.name || 'the doctor'} is confirmed.`,
+            link: '/#/patient/appointments',
+            priority: 'high',
+            entityType: 'appointment',
+            entityId: appointmentId ? String(appointmentId) : null,
+            data: { appointmentId: String(appointmentId || '') }
+        }).catch(() => {}));
+    }
 
     if (patient?.email) {
         const { subject, html } = templates.appointmentConfirmedEmail({
@@ -183,21 +291,6 @@ export async function notifyAppointmentConfirmed({ patient, doctor, appointment,
         jobs.push(sendMail({ to: patient.email, subject, html }).catch(() => {}));
     }
 
-    if (patientId) {
-        jobs.push(
-            sendPushToUser(patientId, {
-                title: 'Appointment Confirmed',
-                body: `Your appointment with Dr. ${doctor?.name || 'the doctor'} is confirmed.`,
-                tag: `appointment-confirmed-${appointment?._id}`,
-                data: {
-                    url: '/patient/appointments',
-                    type: 'appointment_confirmed',
-                    appointmentId: String(appointment?._id || '')
-                }
-            }).catch(() => {})
-        );
-    }
-
     return Promise.allSettled(jobs);
 }
 
@@ -205,6 +298,20 @@ export async function notifyAppointmentConfirmed({ patient, doctor, appointment,
 export async function notifyAppointmentRejected({ patient, doctor, appointment }) {
     const jobs = [];
     const patientId = patient?._id || patient?.id || appointment?.patientId;
+    const appointmentId = appointment?._id;
+
+    if (patientId) {
+        jobs.push(createNotification({
+            userId: patientId,
+            type: 'APPOINTMENT_REJECTED',
+            title: 'Appointment Update',
+            body: 'Your appointment request could not be accepted. Open GramSathi to find alternatives.',
+            link: '/#/patient/appointments',
+            entityType: 'appointment',
+            entityId: appointmentId ? String(appointmentId) : null,
+            data: { appointmentId: String(appointmentId || '') }
+        }).catch(() => {}));
+    }
 
     if (patient?.email) {
         const { subject, html } = templates.appointmentRejectedEmail({
@@ -215,29 +322,41 @@ export async function notifyAppointmentRejected({ patient, doctor, appointment }
         jobs.push(sendMail({ to: patient.email, subject, html }).catch(() => {}));
     }
 
-    if (patientId) {
-        jobs.push(
-            sendPushToUser(patientId, {
-                title: 'Appointment Update',
-                body: 'Your appointment request could not be accepted. Open GramSathi for alternatives.',
-                tag: `appointment-rejected-${appointment?._id}`,
-                data: {
-                    url: '/patient/appointments',
-                    type: 'appointment_rejected',
-                    appointmentId: String(appointment?._id || '')
-                }
-            }).catch(() => {})
-        );
-    }
-
     return Promise.allSettled(jobs);
 }
 
-/** Appointment cancelled. */
+/** Appointment cancelled (by patient or doctor). */
 export async function notifyAppointmentCancelled({ patient, doctor, appointment }) {
     const jobs = [];
     const doctorId = doctor?._id || doctor?.id || appointment?.doctorId;
     const patientId = patient?._id || patient?.id || appointment?.patientId;
+    const appointmentId = appointment?._id;
+
+    if (doctorId) {
+        jobs.push(createNotification({
+            userId: doctorId,
+            type: 'APPOINTMENT_CANCELLED',
+            title: 'Appointment Cancelled',
+            body: `An appointment with ${patient?.name || 'a patient'} has been cancelled.`,
+            link: '/#/doctor/today',
+            entityType: 'appointment',
+            entityId: appointmentId ? String(appointmentId) : null,
+            data: { appointmentId: String(appointmentId || '') }
+        }).catch(() => {}));
+    }
+
+    if (patientId) {
+        jobs.push(createNotification({
+            userId: patientId,
+            type: 'APPOINTMENT_CANCELLED',
+            title: 'Appointment Cancelled',
+            body: 'Your scheduled appointment has been cancelled.',
+            link: '/#/patient/appointments',
+            entityType: 'appointment',
+            entityId: appointmentId ? String(appointmentId) : null,
+            data: { appointmentId: String(appointmentId || '') }
+        }).catch(() => {}));
+    }
 
     if (doctor?.email) {
         const { subject, html } = templates.appointmentCancelledDoctorEmail({
@@ -249,43 +368,44 @@ export async function notifyAppointmentCancelled({ patient, doctor, appointment 
         jobs.push(sendMail({ to: doctor.email, subject, html }).catch(() => {}));
     }
 
-    if (doctorId) {
-        jobs.push(
-            sendPushToUser(doctorId, {
-                title: 'Appointment Cancelled',
-                body: `An appointment with ${patient?.name || 'a patient'} has been cancelled.`,
-                tag: `appointment-cancelled-${appointment?._id}`,
-                data: {
-                    url: '/doctor/today',
-                    type: 'appointment_cancelled',
-                    appointmentId: String(appointment?._id || '')
-                }
-            }).catch(() => {})
-        );
-    }
-
-    if (patientId) {
-        jobs.push(
-            sendPushToUser(patientId, {
-                title: 'Appointment Cancelled',
-                body: 'Your scheduled appointment has been cancelled.',
-                tag: `appointment-cancelled-${appointment?._id}`,
-                data: {
-                    url: '/patient/appointments',
-                    type: 'appointment_cancelled',
-                    appointmentId: String(appointment?._id || '')
-                }
-            }).catch(() => {})
-        );
-    }
-
     return Promise.allSettled(jobs);
+}
+
+/** Doctor marked appointment completed. */
+export async function notifyAppointmentCompleted({ patient, doctor, appointment }) {
+    const patientId = patient?._id || patient?.id || appointment?.patientId;
+    const appointmentId = appointment?._id;
+
+    if (!patientId) return;
+
+    return createNotification({
+        userId: patientId,
+        type: 'APPOINTMENT_COMPLETED',
+        title: 'Consultation Completed',
+        body: `Your consultation with Dr. ${doctor?.name || 'the doctor'} is complete. View your records for details.`,
+        link: '/#/patient/records',
+        entityType: 'appointment',
+        entityId: appointmentId ? String(appointmentId) : null,
+        data: { appointmentId: String(appointmentId || '') }
+    }).catch(() => {});
 }
 
 /** Patient requested queue status. */
 export async function notifyQueueStatus({ patient, doctor, date, position, aheadOfYou, estimatedAt }) {
     const jobs = [];
     const patientId = patient?._id || patient?.id;
+
+    if (patientId) {
+        jobs.push(createNotification({
+            userId: patientId,
+            type: 'QUEUE_STATUS',
+            title: 'Queue Position Update',
+            body: `You are #${position} in queue. Estimated arrival: ${estimatedAt || 'On schedule'}.`,
+            link: '/#/patient/appointments',
+            entityType: 'appointment',
+            data: { position, estimatedAt }
+        }).catch(() => {}));
+    }
 
     if (patient?.email) {
         const { subject, html } = templates.queueStatusEmail({
@@ -299,21 +419,6 @@ export async function notifyQueueStatus({ patient, doctor, date, position, ahead
         jobs.push(sendMail({ to: patient.email, subject, html }).catch(() => {}));
     }
 
-    if (patientId) {
-        jobs.push(
-            sendPushToUser(patientId, {
-                title: 'Queue Position Update',
-                body: `You are #${position} in queue. Estimated arrival: ${estimatedAt || 'On schedule'}.`,
-                tag: 'queue-status',
-                data: {
-                    url: '/patient/queue',
-                    type: 'queue_status',
-                    position
-                }
-            }).catch(() => {})
-        );
-    }
-
     return Promise.allSettled(jobs);
 }
 
@@ -322,6 +427,20 @@ export async function notifyQueueStatus({ patient, doctor, date, position, ahead
 export async function notifyHealthRecordUploaded({ recipient, uploadedBy, record }) {
     const jobs = [];
     const recipientId = recipient?._id || recipient?.id;
+    const recordId = record?._id;
+
+    if (recipientId) {
+        jobs.push(createNotification({
+            userId: recipientId,
+            type: 'HEALTH_RECORD_ADDED',
+            title: 'New Health Record Added',
+            body: 'A new clinical record has been added to your GramSathi file.',
+            link: '/#/patient/records',
+            entityType: 'health_record',
+            entityId: recordId ? String(recordId) : null,
+            data: { recordId: String(recordId || '') }
+        }).catch(() => {}));
+    }
 
     if (recipient?.email) {
         const { subject, html } = templates.healthRecordUploadedEmail({
@@ -333,21 +452,6 @@ export async function notifyHealthRecordUploaded({ recipient, uploadedBy, record
         jobs.push(sendMail({ to: recipient.email, subject, html }).catch(() => {}));
     }
 
-    if (recipientId) {
-        jobs.push(
-            sendPushToUser(recipientId, {
-                title: 'New Health Record Added',
-                body: 'A new clinical consultation record has been added to your GramSathi file.',
-                tag: `record-${record?._id || Date.now()}`,
-                data: {
-                    url: '/patient/records',
-                    type: 'health_record',
-                    recordId: String(record?._id || '')
-                }
-            }).catch(() => {})
-        );
-    }
-
     return Promise.allSettled(jobs);
 }
 
@@ -356,6 +460,21 @@ export async function notifyHealthRecordUploaded({ recipient, uploadedBy, record
 export async function notifyReferralCreated({ referral, patient, fromFacilityName, toFacilityEmail, toFacilityName }) {
     const jobs = [];
     const patientId = patient?._id || patient?.id || referral?.patientId;
+    const referralId = referral?._id;
+
+    if (patientId) {
+        jobs.push(createNotification({
+            userId: patientId,
+            type: 'REFERRAL_CREATED',
+            title: 'Specialty Referral Created',
+            body: `A referral to ${toFacilityName || 'a specialist facility'} has been arranged for you.`,
+            link: '/#/patient',
+            priority: 'high',
+            entityType: 'referral',
+            entityId: referralId ? String(referralId) : null,
+            data: { referralId: String(referralId || '') }
+        }).catch(() => {}));
+    }
 
     if (toFacilityEmail) {
         const { subject, html } = templates.referralCreatedFacilityEmail({
@@ -379,21 +498,6 @@ export async function notifyReferralCreated({ referral, patient, fromFacilityNam
         jobs.push(sendMail({ to: patient.email, subject, html }).catch(() => {}));
     }
 
-    if (patientId) {
-        jobs.push(
-            sendPushToUser(patientId, {
-                title: 'Specialty Referral Created',
-                body: `A referral to ${toFacilityName || 'higher medical facility'} has been arranged for you.`,
-                tag: `referral-${referral?._id}`,
-                data: {
-                    url: '/patient',
-                    type: 'referral_created',
-                    referralId: String(referral?._id || '')
-                }
-            }).catch(() => {})
-        );
-    }
-
     return Promise.allSettled(jobs);
 }
 
@@ -403,6 +507,20 @@ export async function notifyReferralStatusChanged({ referral, patient, toFacilit
 
     const jobs = [];
     const patientId = patient?._id || patient?.id || referral?.patientId;
+    const referralId = referral?._id;
+
+    if (patientId) {
+        jobs.push(createNotification({
+            userId: patientId,
+            type: 'REFERRAL_UPDATED',
+            title: 'Referral Status Updated',
+            body: `Your medical referral to ${toFacilityName || 'the facility'} has been updated.`,
+            link: '/#/patient',
+            entityType: 'referral',
+            entityId: referralId ? String(referralId) : null,
+            data: { referralId: String(referralId || ''), status }
+        }).catch(() => {}));
+    }
 
     if (patient?.email) {
         const { subject, html } = templates.referralStatusChangedEmail({
@@ -414,21 +532,6 @@ export async function notifyReferralStatusChanged({ referral, patient, toFacilit
         jobs.push(sendMail({ to: patient.email, subject, html }).catch(() => {}));
     }
 
-    if (patientId) {
-        jobs.push(
-            sendPushToUser(patientId, {
-                title: 'Referral Status Updated',
-                body: `Your medical referral status has moved to: ${status}.`,
-                tag: `referral-status-${referral?._id}`,
-                data: {
-                    url: '/patient',
-                    type: 'referral_status',
-                    referralId: String(referral?._id || '')
-                }
-            }).catch(() => {})
-        );
-    }
-
     return Promise.allSettled(jobs);
 }
 
@@ -438,27 +541,25 @@ export async function notifyQueueFinalized({ patient, doctorName, facilityName, 
     const jobs = [];
     const patientId = patient?._id || patient?.id;
 
+    if (patientId) {
+        jobs.push(createNotification({
+            userId: patientId,
+            type: 'QUEUE_FINALIZED',
+            title: 'Session Queue Schedule Ready',
+            body: `Your consultation position is #${position}. Estimated arrival: ${estimatedArrivalTime || 'On time'}.`,
+            link: '/#/patient/appointments',
+            priority: 'high',
+            entityType: 'appointment',
+            data: { position, estimatedArrivalTime, date, sessionName }
+        }).catch(() => {}));
+    }
+
     if (patient?.email) {
         const mail = templates.queueFinalizedEmail({
             patientName: patient.name, doctorName, facilityName, date, sessionName,
             position, estimatedArrivalTime, totalPatients
         });
         jobs.push(sendMail({ to: patient.email, ...mail }).catch(() => {}));
-    }
-
-    if (patientId) {
-        jobs.push(
-            sendPushToUser(patientId, {
-                title: 'Session Queue Schedule Ready',
-                body: `Your consultation position is #${position}. Estimated arrival: ${estimatedArrivalTime || 'On time'}.`,
-                tag: `queue-finalized-${date}-${position}`,
-                data: {
-                    url: '/patient/queue',
-                    type: 'queue_finalized',
-                    position
-                }
-            }).catch(() => {})
-        );
     }
 
     return Promise.allSettled(jobs);
@@ -468,26 +569,24 @@ export async function notifyDoctorSessionSchedule({ doctor, facilityName, date, 
     const jobs = [];
     const doctorId = doctor?._id || doctor?.id;
 
+    if (doctorId) {
+        jobs.push(createNotification({
+            userId: doctorId,
+            type: 'DOCTOR_SESSION_READY',
+            title: 'OPD Session Finalized',
+            body: `${sessionName || 'Your session'} has ${totalPatients} confirmed patients scheduled.`,
+            link: '/#/doctor/today',
+            entityType: 'session',
+            data: { date, sessionName, totalPatients }
+        }).catch(() => {}));
+    }
+
     if (doctor?.email) {
         const mail = templates.doctorSessionScheduleEmail({
             doctorName: doctor.name, facilityName, date, sessionName,
             startsAt, endsAt, totalPatients, entries
         });
         jobs.push(sendMail({ to: doctor.email, ...mail }).catch(() => {}));
-    }
-
-    if (doctorId) {
-        jobs.push(
-            sendPushToUser(doctorId, {
-                title: 'OPD Session Finalized',
-                body: `${sessionName || 'Your session'} has ${totalPatients} confirmed patients scheduled.`,
-                tag: `doctor-session-${date}`,
-                data: {
-                    url: '/doctor/today',
-                    type: 'doctor_session'
-                }
-            }).catch(() => {})
-        );
     }
 
     return Promise.allSettled(jobs);
@@ -499,6 +598,20 @@ export async function notifyDiagnosticCompleted({ patient, testName, resultSumma
     const jobs = [];
     const patientId = patient?._id || patient?.id;
 
+    if (patientId) {
+        // Privacy rule: NEVER include resultSummary in push body — it may contain lab values
+        jobs.push(createNotification({
+            userId: patientId,
+            type: 'DIAGNOSTIC_REPORT_READY',
+            title: 'Diagnostic Report Ready',
+            body: `Your medical test report is ready to view. Open GramSathi to see the results.`,
+            link: '/#/patient/records',
+            priority: 'high',
+            entityType: 'diagnostic',
+            data: { testName }
+        }).catch(() => {}));
+    }
+
     if (patient?.email) {
         const mail = templates.diagnosticCompletedEmail({
             patientName: patient.name, testName, resultSummary, facilityName
@@ -506,66 +619,96 @@ export async function notifyDiagnosticCompleted({ patient, testName, resultSumma
         jobs.push(sendMail({ to: patient.email, ...mail }).catch(() => {}));
     }
 
-    if (patientId) {
-        // Privacy rule: Safe general preview without exposing detailed lab values
-        jobs.push(
-            sendPushToUser(patientId, {
-                title: 'Diagnostic Report Ready',
-                body: `Your medical test report (${testName || 'Diagnostic Test'}) is ready to view.`,
-                tag: `diagnostic-ready-${Date.now()}`,
-                data: {
-                    url: '/patient/records',
-                    type: 'diagnostic_completed'
-                }
-            }).catch(() => {})
-        );
-    }
-
     return Promise.allSettled(jobs);
 }
 
 // ─── Pharmacy Orders ─────────────────────────────────────────────────────────
 
-export async function notifyPharmacyNewOrder({ order, pharmacyOwnerId }) {
-    if (!pharmacyOwnerId) return;
+/**
+ * Maps Order model status values to user-friendly notification text.
+ * Order statuses: 'pending', 'confirmed', 'preparing', 'ready', 'dispatched', 'delivered', 'cancelled'
+ */
+const ORDER_STATUS_MESSAGES = {
+    confirmed:  { title: 'Order Confirmed', body: 'Your medicine order has been confirmed by the pharmacy.' },
+    preparing:  { title: 'Order Being Prepared', body: 'Your medicine order is currently being prepared.' },
+    ready:      { title: 'Order Ready', body: 'Your medicine order is ready for pickup.' },
+    dispatched: { title: 'Order Dispatched', body: 'Your medicine order is on its way to you.' },
+    delivered:  { title: 'Order Delivered', body: 'Your medicine order has been delivered successfully.' },
+    cancelled:  { title: 'Order Cancelled', body: 'Your medicine order has been cancelled.' }
+};
 
-    return sendPushToUser(pharmacyOwnerId, {
-        title: 'New Pharmacy Order',
-        body: 'A new medicine order has been received at your pharmacy.',
-        tag: `order-${order?._id}`,
-        data: {
-            url: '/pharmacy',
-            type: 'pharmacy_new_order',
-            orderId: String(order?._id || '')
-        }
-    });
+const ORDER_STATUS_TYPES = {
+    confirmed:  'PHARMACY_ORDER_CONFIRMED',
+    preparing:  'PHARMACY_ORDER_PREPARING',
+    ready:      'PHARMACY_ORDER_READY',
+    dispatched: 'PHARMACY_ORDER_DISPATCHED',
+    delivered:  'PHARMACY_ORDER_DELIVERED',
+    cancelled:  'PHARMACY_ORDER_CANCELLED'
+};
+
+export async function notifyPharmacyNewOrder({ order, pharmacyOwnerId }) {
+    const jobs = [];
+    const orderId = order?._id;
+
+    // Pharmacy owner gets in-app + push
+    if (pharmacyOwnerId) {
+        jobs.push(createNotification({
+            userId: pharmacyOwnerId,
+            type: 'PHARMACY_ORDER_PLACED',
+            title: 'New Pharmacy Order',
+            body: 'A new medicine order has been received at your pharmacy.',
+            link: '/#/pharmacy',
+            priority: 'high',
+            entityType: 'order',
+            entityId: orderId ? String(orderId) : null,
+            data: { orderId: String(orderId || '') }
+        }).catch(() => {}));
+    }
+
+    // Patient gets in-app + push confirming order placed
+    const patientId = order?.userId?._id || order?.userId;
+    if (patientId && String(patientId) !== String(pharmacyOwnerId)) {
+        jobs.push(createNotification({
+            userId: patientId,
+            type: 'PHARMACY_ORDER_PLACED',
+            title: 'Order Placed Successfully',
+            body: 'Your medicine order has been placed. The pharmacy will confirm it shortly.',
+            link: `/#/patient/medicine/orders/${orderId}`,
+            entityType: 'order',
+            entityId: orderId ? String(orderId) : null,
+            data: { orderId: String(orderId || '') }
+        }).catch(() => {}));
+    }
+
+    return Promise.allSettled(jobs);
 }
 
 export async function notifyPharmacyOrderStatus({ order, status, note }) {
     const userId = order?.userId?._id || order?.userId;
     if (!userId) return;
 
-    const friendlyStatus = {
-        confirmed: 'confirmed by pharmacy',
-        ready: 'ready for pickup',
-        completed: 'completed',
-        cancelled: 'cancelled'
-    }[status] || status;
+    const orderId = order?._id;
+    const msg = ORDER_STATUS_MESSAGES[status];
+    if (!msg) return; // 'pending' has no status-change notification
 
-    return sendPushToUser(userId, {
-        title: 'Medicine Order Update',
-        body: `Your medicine order is now ${friendlyStatus}.`,
-        tag: `order-status-${order?._id}`,
-        data: {
-            url: '/patient/orders',
-            type: 'pharmacy_order_status',
-            orderId: String(order?._id || ''),
-            status
-        }
-    });
+    const notifType = ORDER_STATUS_TYPES[status] || 'PHARMACY_ORDER_PLACED';
+    const priority = (status === 'delivered' || status === 'ready') ? 'high' : 'normal';
+
+    return createNotification({
+        userId,
+        type: notifType,
+        title: msg.title,
+        body: msg.body,
+        link: `/#/patient/medicine/orders/${orderId}`,
+        priority,
+        entityType: 'order',
+        entityId: orderId ? String(orderId) : null,
+        data: { orderId: String(orderId || ''), status }
+    }).catch(() => {});
 }
 
 export default {
+    createNotification,
     sendNotification,
     sendPushToUser,
     sendPushToUsers,
@@ -574,6 +717,7 @@ export default {
     notifyAppointmentConfirmed,
     notifyAppointmentRejected,
     notifyAppointmentCancelled,
+    notifyAppointmentCompleted,
     notifyQueueStatus,
     notifyHealthRecordUploaded,
     notifyReferralCreated,

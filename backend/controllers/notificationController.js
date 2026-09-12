@@ -7,19 +7,22 @@ import {
 } from '../services/notifications/pushService.js';
 import { sendMail } from '../services/notifications/mailer.js';
 import User from '../models/User.js';
+import Notification from '../models/Notification.js';
 
 /**
- * Controller for Push and Email Notification management.
+ * Controller for Push, Email, and In-App Notification management.
  *
  * Security Requirements:
- * - All mutations and test dispatches require authentication.
- * - Endpoints strictly bind to req.user.id from the verified JWT token.
- * - Client-supplied userIds are never trusted.
+ * - All mutations and queries require authentication.
+ * - userId is ALWAYS derived from req.user.id (JWT token). Never from query params or body.
+ * - A user can only access, modify, or delete their OWN notifications.
  */
+
+// ─── Push Subscription Management ────────────────────────────────────────────
 
 /**
  * GET /api/notifications/push/public-key
- * Returns the VAPID public key needed by browser PushManager.subscribe().
+ * Returns the VAPID public key for PushManager.subscribe().
  */
 export const getPublicKey = (req, res) => {
     const publicKey = getVapidPublicKey();
@@ -133,11 +136,7 @@ export const testEmail = async (req, res) => {
             </div>
         `;
 
-        const result = await sendMail({
-            to: user.email,
-            subject,
-            html
-        });
+        const result = await sendMail({ to: user.email, subject, html });
 
         return res.json({
             success: result.success,
@@ -150,10 +149,117 @@ export const testEmail = async (req, res) => {
     }
 };
 
+// ─── In-App Notification History ─────────────────────────────────────────────
+
+/**
+ * GET /api/notifications
+ * Returns paginated notification history for the authenticated user.
+ * Query params: page (default: 1), limit (default: 20), unreadOnly (boolean)
+ */
+export const getNotifications = async (req, res) => {
+    try {
+        const userId = req.user.id;
+        const page = Math.max(1, parseInt(req.query.page) || 1);
+        const limit = Math.min(50, Math.max(1, parseInt(req.query.limit) || 20));
+        const unreadOnly = req.query.unreadOnly === 'true';
+
+        const query = { userId };
+        if (unreadOnly) query.isRead = false;
+
+        const [notifications, total] = await Promise.all([
+            Notification.find(query)
+                .sort({ createdAt: -1 })
+                .limit(limit)
+                .skip((page - 1) * limit)
+                .lean(),
+            Notification.countDocuments(query)
+        ]);
+
+        return res.json({
+            notifications,
+            total,
+            page,
+            limit,
+            totalPages: Math.ceil(total / limit),
+            hasMore: page * limit < total
+        });
+    } catch (err) {
+        console.error('[notificationController/getNotifications] Error:', err.message);
+        return res.status(500).json({ message: 'Failed to load notifications' });
+    }
+};
+
+/**
+ * GET /api/notifications/unread-count
+ * Returns the unread notification count for the authenticated user.
+ * Lightweight — suitable for polling from the bell component.
+ */
+export const getUnreadCount = async (req, res) => {
+    try {
+        const count = await Notification.countDocuments({
+            userId: req.user.id,
+            isRead: false
+        });
+        return res.json({ count });
+    } catch (err) {
+        console.error('[notificationController/getUnreadCount] Error:', err.message);
+        return res.status(500).json({ message: 'Failed to fetch unread count' });
+    }
+};
+
+/**
+ * PATCH /api/notifications/:id/read
+ * Marks a specific notification as read.
+ * Strictly enforces ownership — userId from JWT only.
+ */
+export const markRead = async (req, res) => {
+    try {
+        const notification = await Notification.findOneAndUpdate(
+            { _id: req.params.id, userId: req.user.id },
+            { isRead: true, readAt: new Date() },
+            { new: true }
+        );
+
+        if (!notification) {
+            return res.status(404).json({ message: 'Notification not found' });
+        }
+
+        return res.json({ success: true, notification });
+    } catch (err) {
+        console.error('[notificationController/markRead] Error:', err.message);
+        return res.status(500).json({ message: 'Failed to mark notification as read' });
+    }
+};
+
+/**
+ * PATCH /api/notifications/read-all
+ * Marks all notifications for the authenticated user as read.
+ */
+export const markAllRead = async (req, res) => {
+    try {
+        const result = await Notification.updateMany(
+            { userId: req.user.id, isRead: false },
+            { isRead: true, readAt: new Date() }
+        );
+
+        return res.json({
+            success: true,
+            updated: result.modifiedCount
+        });
+    } catch (err) {
+        console.error('[notificationController/markAllRead] Error:', err.message);
+        return res.status(500).json({ message: 'Failed to mark all notifications as read' });
+    }
+};
+
 export default {
     getPublicKey,
     subscribe,
     unsubscribe,
     testPush,
-    testEmail
+    testEmail,
+    getNotifications,
+    getUnreadCount,
+    markRead,
+    markAllRead
 };

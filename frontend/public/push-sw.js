@@ -41,7 +41,10 @@ self.addEventListener('push', (event) => {
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
 
-  const rawUrl = event.notification.data?.url || '/';
+  let rawUrl = event.notification.data?.url || '/';
+  if (rawUrl.startsWith('/') && !rawUrl.startsWith('/#') && rawUrl !== '/') {
+    rawUrl = '/#' + rawUrl;
+  }
   
   // Guard against open redirect attacks: resolve strictly against self.location.origin
   let targetUrl;

@@ -20,6 +20,7 @@ import CheckoutPage from './CheckoutPage'
 import OrderSuccess from './OrderSuccess'
 import Button from '../components/ui/Button'
 import { Loading } from '../components/ui/States'
+import NotificationsPage from './NotificationsPage'
 
 const VideoCall = lazy(() => import('../components/VideoCall'))
 
@@ -53,6 +54,10 @@ export default function PatientDashboard() {
       <Route path="appointments" element={<Navigate to="/patient/care" replace />} />
       <Route path="symptoms" element={<Navigate to="/patient/care/symptoms" replace />} />
       <Route path="orders" element={<Navigate to="/patient/medicine/orders" replace />} />
+
+      {/* Notification Center full page */}
+      <Route path="notifications" element={<NotificationsPage />} />
+
       <Route path="*" element={<Navigate to="/patient" replace />} />
     </Routes>
   )
