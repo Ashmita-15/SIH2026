@@ -152,8 +152,13 @@ export async function createReferral(input, ctx) {
     if (!ACTING_ROLES.includes(actor.role)) {
         throw forbidden('Only a doctor, health worker or facility can create a referral');
     }
+    /**
+     * A referral goes from a facility, so the sender needs one. A health worker
+     * who registered themselves has none until their PHC or hospital attaches
+     * them on its staff page — that is the step to take, and the message says so.
+     */
     if (!actor.facilityId) {
-        throw badRequest('Your account is not attached to a facility, so it cannot refer from one');
+        throw forbidden('Referrals unlock once your PHC or hospital adds you to their facility.');
     }
 
     const { patientId, priority, reason } = input;
@@ -292,9 +297,25 @@ export async function listReferrals(filters = {}, ctx) {
 
     if (actor.role === 'patient') {
         query.patientId = actor.id;
+    } else if (!actor.facilityId) {
+        /**
+         * An account no facility has attached yet has no facility referrals —
+         * but a health worker or doctor can still have referrals they raised
+         * themselves, which canView already lets a creator open. This used to
+         * be a 403, and because the patient profile loads this list, every
+         * patient became unopenable for a newly registered health worker.
+         */
+        if (!['health_worker', 'doctor'].includes(actor.role)) {
+            throw forbidden('Your account is not attached to a facility');
+        }
+        query.createdBy = actor.id;
     } else {
-        if (!actor.facilityId) throw forbidden('Your account is not attached to a facility');
-        query.$or = [{ fromFacilityId: actor.facilityId }, { toFacilityId: actor.facilityId }];
+        query.$or = [
+            { fromFacilityId: actor.facilityId },
+            { toFacilityId: actor.facilityId },
+            // Referrals this person raised stay visible if they later move facility.
+            { createdBy: actor.id }
+        ];
         if (actor.role === 'hospital') query.$or.push({ toHospitalUserId: actor.id });
     }
 
