@@ -50,10 +50,16 @@ const userSchema = new mongoose.Schema({
             type: String,
             enum: ['Point']
         },
-        coordinates: { type: [Number] } // [longitude, latitude]
+        _id: false,
+        // `default: undefined` is load-bearing. A Mongoose array defaults to
+        // [], which materialises this whole subdocument on *every* user — so
+        // patients and doctors were all being saved with an empty
+        // facilityLocation they had never been asked for.
+        coordinates: { type: [Number], default: undefined } // [longitude, latitude]
     },
     facilityLocationAccuracy: { type: Number },
-    facilityAddress: { type: String }
+    facilityAddress: { type: String },
+
     workerType: { type: String, enum: ['asha', 'anm', 'cho'] },
     age: { type: Number },
     gender: { type: String, enum: ['female', 'male', 'other'] },

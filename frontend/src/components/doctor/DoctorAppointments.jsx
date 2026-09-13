@@ -15,6 +15,7 @@ import AppointmentCard from '../AppointmentCard'
 import AppointmentAttachments from './AppointmentAttachments'
 import AssistedContext from './AssistedContext'
 import { isToday, isFuture } from '../../lib/status'
+import { isRemote } from '../../lib/consultation'
 
 const TIME_SLOTS = [
   '09:00-10:00', '10:00-11:00', '11:00-12:00', '12:00-13:00',
@@ -213,7 +214,7 @@ export default function DoctorAppointments({ mode = 'all', onJoinRoom }) {
                 )}
                 {appointment.status === 'confirmed' && (
                   <div className="flex items-center gap-2">
-                    {onJoinRoom && (
+                    {onJoinRoom && isRemote(appointment) && (
                       <Button size="sm" onClick={() => onJoinRoom(appointment._id)}>
                         {t('appointments.startConsultation')}
                       </Button>

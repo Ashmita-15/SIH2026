@@ -9,6 +9,7 @@ import Button from '../ui/Button'
 import Avatar from '../ui/Avatar'
 import Skeleton from '../ui/Skeleton'
 import { appointmentStatus, orderStatus, formatDate, isToday } from '../../lib/status'
+import { isRemote } from '../../lib/consultation'
 
 const QUICK = [
   { key: 'checkSymptoms', to: '/patient/care/symptoms', icon: 'M12 8v4l2.5 2.5M12 3a9 9 0 100 18 9 9 0 000-18z' },
@@ -219,6 +220,9 @@ function FocusCard({ loading, appointment, navigate, t, lang, firstName }) {
   const status = appointmentStatus(appointment.status, t)
   const when = appointment.confirmedDate || appointment.requestedDate
   const ready = appointment.status === 'confirmed'
+  // `ready` styles the card as confirmed; joining is a separate question — an
+  // offline visit is just as confirmed, it simply has no room to enter.
+  const canJoin = ready && isRemote(appointment)
   const today = isToday(when)
 
   return (
@@ -252,7 +256,7 @@ function FocusCard({ loading, appointment, navigate, t, lang, firstName }) {
           </div>
         </div>
 
-        {ready ? (
+        {canJoin ? (
           <div className="flex flex-col sm:flex-row gap-2.5">
             <Button
               className="bg-white text-primary-700 hover:bg-primary-50"

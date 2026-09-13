@@ -8,8 +8,12 @@ import { Field, Input, Select, PasswordInput } from '../components/ui/Field'
 import Button from '../components/ui/Button'
 import Alert from '../components/ui/Alert'
 import logo from '../assets/images/logo.png'
+import FacilityLocation from '../components/auth/FacilityLocation'
 
 const ROLES = ['patient', 'doctor', 'health_worker', 'pharmacy', 'hospital']
+
+/** Roles that are a physical place, and so are asked where they are. */
+const FACILITY_ROLES = ['hospital', 'pharmacy']
 
 /**
  * ASHA, ANM and CHO are the three frontline roles, kept as one account type
@@ -26,6 +30,8 @@ export default function LoginSignup() {
   const [isLogin, setIsLogin] = useState(true)
   const [form, setForm] = useState({ role: 'patient' })
   const [errors, setErrors] = useState({})
+  // Only ever set for hospital/pharmacy sign-up. null until detected.
+  const [facilityLoc, setFacilityLoc] = useState(null)
   const [formError, setFormError] = useState('')
   const [notice, setNotice] = useState('')
   const [submitting, setSubmitting] = useState(false)
@@ -69,6 +75,10 @@ export default function LoginSignup() {
       if (form.role === 'health_worker') {
         if (!form.workerType) next.workerType = t('auth.errors.workerTypeRequired')
         if (!(form.village || '').trim()) next.village = t('auth.errors.villageRequired')
+      }
+      // A facility patients cannot be routed to is not a usable listing.
+      if (FACILITY_ROLES.includes(form.role) && !facilityLoc?.address) {
+        next.facilityLocation = t('auth.location.required')
       }
     }
 
@@ -117,7 +127,14 @@ export default function LoginSignup() {
           workerType: form.workerType,
           specialization: form.specialization,
           qualification: form.qualification,
-          availability: form.availability
+          availability: form.availability,
+          // Sent only for the roles that were asked; re-validated server-side.
+          ...(FACILITY_ROLES.includes(form.role) && facilityLoc ? {
+            latitude: facilityLoc.latitude,
+            longitude: facilityLoc.longitude,
+            accuracy: facilityLoc.accuracy,
+            address: facilityLoc.address
+          } : {})
         })
         // Carry the email across so signing in is one field, not two.
         setForm({ role: form.role, email: form.email })
@@ -257,6 +274,17 @@ export default function LoginSignup() {
                     </>
                   )}
                 </>
+              )}
+
+              {FACILITY_ROLES.includes(form.role) && (
+                <FacilityLocation
+                  value={facilityLoc}
+                  onChange={(loc) => {
+                    setFacilityLoc(loc)
+                    setErrors(prev => (prev.facilityLocation ? { ...prev, facilityLocation: undefined } : prev))
+                  }}
+                  error={errors.facilityLocation}
+                />
               )}
 
               <Field label={t('auth.email')} error={errors.email} required>

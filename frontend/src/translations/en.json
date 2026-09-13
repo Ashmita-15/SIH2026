@@ -169,7 +169,29 @@
     "workerType": "Your role",
     "workerTypePlaceholder": "Select ASHA, ANM or CHO…",
     "villageWorkerHint": "The village you work in. You can be given more villages later.",
-    "workerNotice": "Your account will cover this one village to begin with. Referrals and facility features stay locked until your PHC or hospital adds you to their facility."
+    "workerNotice": "Your account will cover this one village to begin with. Referrals and facility features stay locked until your PHC or hospital adds you to their facility.",
+    "location": {
+      "label": "Where is this facility?",
+      "why": "Patients are shown nearby facilities and travel to them, so this is required. Your browser will ask permission.",
+      "detect": "Detect my location",
+      "retry": "Detect again",
+      "detected": "Location detected",
+      "coords": "{{lat}}, {{lon}} · accurate to about {{accuracy}} m",
+      "required": "Detect this facility’s location to continue",
+      "denied": "Location permission was refused. Allow it in your browser settings, then try again.",
+      "unavailable": "Your device could not get a location. Check that location services are on.",
+      "timeout": "Getting a location took too long. Try again, ideally near a window or outdoors.",
+      "unsupported": "This browser cannot provide a location. Try a different browser.",
+      "geocodeFailed": "We found your coordinates but could not look up an address. Try again in a moment.",
+      "coordsOnly": "{{lat}}, {{lon}} · from the address you entered",
+      "enterManually": "Enter address manually",
+      "manualLabel": "Facility address",
+      "manualHint": "Include the village or town and district. We look it up on OpenStreetMap.",
+      "manualPlaceholder": "e.g. Civil Hospital, Rampur, Ludhiana, Punjab",
+      "searchAddress": "Find this address",
+      "noMatch": "We could not find that address. Try adding the district or a nearby landmark.",
+      "searchFailed": "The address lookup failed. Try again in a moment."
+    }
   },
   "status": {
     "appointment": {
@@ -354,7 +376,9 @@
       "notChosen": "Not chosen yet",
       "reason": "Reason you gave",
       "notBooked": "Nothing is booked yet. Choose a day and time, then send your request."
-    }
+    },
+    "offline": "Offline visit — go to the clinic",
+    "offlineNote": "Visit the clinic in person. There is no call to join."
   },
   "records": {
     "title": "Health records",
