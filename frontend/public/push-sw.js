@@ -21,6 +21,10 @@ self.addEventListener('push', (event) => {
     };
   }
 
+  // An SOS asks to stay on screen until someone acts on it; everything else
+  // keeps the previous, dismissible behaviour.
+  const urgent = Boolean(payload.requireInteraction);
+
   const title = payload.title || 'GramSathi Health Alert';
   const options = {
     body: payload.body || 'You have an update in GramSathi.',
@@ -28,9 +32,9 @@ self.addEventListener('push', (event) => {
     badge: payload.badge || '/logo.png',
     tag: payload.tag || `gramsathi-notification-${Date.now()}`,
     data: payload.data || { url: '/' },
-    vibrate: [100, 50, 100],
+    vibrate: urgent ? [300, 100, 300, 100, 300] : [100, 50, 100],
     renotify: true,
-    requireInteraction: false
+    requireInteraction: urgent
   };
 
   event.waitUntil(
@@ -45,7 +49,7 @@ self.addEventListener('notificationclick', (event) => {
   if (rawUrl.startsWith('/') && !rawUrl.startsWith('/#') && rawUrl !== '/') {
     rawUrl = '/#' + rawUrl;
   }
-  
+
   // Guard against open redirect attacks: resolve strictly against self.location.origin
   let targetUrl;
   try {
@@ -64,10 +68,13 @@ self.addEventListener('notificationclick', (event) => {
       // If a GramSathi tab/window is already open, focus it and navigate
       for (const client of windowClients) {
         if (client.url.startsWith(self.location.origin) && 'focus' in client) {
-          if ('navigate' in client) {
-            client.navigate(targetUrl);
-          }
-          return client.focus();
+          return client.focus().then((focused) => {
+            const target = focused || client;
+            if (!('navigate' in target)) return target;
+            // navigate() rejects for a window this worker does not control;
+            // opening the page is better than a click that does nothing.
+            return target.navigate(targetUrl).catch(() => clients.openWindow && clients.openWindow(targetUrl));
+          });
         }
       }
       // Otherwise open a new window

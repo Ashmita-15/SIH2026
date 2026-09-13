@@ -164,12 +164,28 @@
       "confirmMismatch": "The two passwords don't match.",
       "ageInvalid": "Please enter an age between 1 and 120.",
       "workerTypeRequired": "Choose ASHA, ANM or CHO",
-      "villageRequired": "Village is required"
+      "villageRequired": "Village is required",
+      "facilityLocationRequired": "Detect the facility location to continue.",
+      "addressRequired": "Please enter the facility address.",
+      "phoneInvalid": "Enter a valid 10-digit mobile number."
     },
     "workerType": "Your role",
     "workerTypePlaceholder": "Select ASHA, ANM or CHO…",
     "villageWorkerHint": "The village you work in. You can be given more villages later.",
-    "workerNotice": "Your account will cover this one village to begin with. Referrals and facility features stay locked until your PHC or hospital adds you to their facility."
+    "workerNotice": "Your account will cover this one village to begin with. Referrals and facility features stay locked until your PHC or hospital adds you to their facility.",
+    "facilityName": "Facility name",
+    "facilityNamePlaceholder": "e.g. PHC Rampur",
+    "facilityPhone": "Facility contact number",
+    "facilityPhoneHint": "Shown to patients who send an SOS, so they can call you.",
+    "facilityLocation": "Facility location",
+    "facilityLocationHint": "Do this at the facility — patients and emergency alerts use this location.",
+    "detectLocation": "Detect facility location",
+    "redetectLocation": "Detect again",
+    "locationCaptured": "Location captured: {{lat}}, {{lng}} (± {{metres}} m)",
+    "locationApproximate": "This location is only accurate to about {{metres}} m. If you are at the facility, turn on GPS and detect again.",
+    "addressLookupFailed": "Location captured, but we couldn't look up the address. Please type it below.",
+    "facilityAddress": "Facility address",
+    "facilityAddressHint": "Filled in from your location — correct it if needed."
   },
   "status": {
     "appointment": {
@@ -354,7 +370,8 @@
       "notChosen": "Not chosen yet",
       "reason": "Reason you gave",
       "notBooked": "Nothing is booked yet. Choose a day and time, then send your request."
-    }
+    },
+    "offline": "In person at the clinic"
   },
   "records": {
     "title": "Health records",
@@ -412,7 +429,9 @@
       "specialty": "Speciality: {{value}}",
       "unmatched": "That speciality is not available here, so all doctors are shown.",
       "clear": "Clear"
-    }
+    },
+    "notBookable": "Not taking bookings yet",
+    "notBookableHelp": "This doctor hasn't opened any consultation sessions yet, so an appointment can't be booked right now. Choose another doctor, or check back later."
   },
   "symptomChecker": {
     "title": "AI health assistant",
@@ -581,7 +600,22 @@
       "error": "Could not send the alert. Please try calling a helpline below.",
       "retry": "Try again",
       "denied": "Location permission denied. Please allow location access and try again.",
-      "unavailable": "Location is not available on this device. Please call a helpline below."
+      "unavailable": "Location is not available on this device. Please call a helpline below.",
+      "offline": "You're offline, so the alert can't be sent. Call 108 now.",
+      "networkError": "Couldn't reach GramSathi. Check your connection and try again — or call 108 now.",
+      "noFacility": "No registered hospital was found within {{km}} km of you. Please call 108 for an ambulance now.",
+      "slow": "Still sending… the server can take up to a minute to respond. You can call 108 below at any time.",
+      "sentTitle": "Alert sent",
+      "sentDetail_one": "Sent to {{hospital}} ({{distance}} km away) with your location. Keep your phone with you — they may call.",
+      "sentDetail_other": "Sent to {{count}} hospitals with your location, nearest {{hospital}} ({{distance}} km away). Keep your phone with you — they may call.",
+      "unconfirmedTitle": "Alert saved — not yet confirmed",
+      "unconfirmedDetail": "We recorded your alert for the hospitals below, but couldn't confirm it reached their phones or email. Call 108 or a hospital below now.",
+      "duplicate": "You already sent an alert a moment ago — this is that alert.",
+      "reached": "sent",
+      "notReached": "not confirmed",
+      "callHospital": "Call",
+      "notGuaranteed": "Sending an alert doesn't guarantee someone has seen it. If this is serious, call 108 now.",
+      "acknowledged": "A hospital has acknowledged your alert"
     },
     "orCall": "or call a helpline",
     "services": {
@@ -688,7 +722,8 @@
       "overview": "Overview",
       "referrals": "Referrals",
       "coordination": "Coordination",
-      "staff": "Health workers"
+      "staff": "Health workers",
+      "emergencies": "Emergencies"
     },
     "health_worker": {
       "overview": "Worklist",
@@ -1028,11 +1063,39 @@
     "back": "Back to results",
     "showRoute": "Show route",
     "locationError": "Couldn't detect your location. Please allow location access or enter an address manually.",
-    "dragHint": "Drag the marker to adjust your location"
+    "dragHint": "Drag the marker to adjust your location",
+    "manualHint": "You can also search for a place or tap the map.",
+    "tapMapHint": "Or tap the map to drop a pin where you are",
+    "placeNotFound": "No place found with that name. Try a nearby town, or tap the map to drop a pin.",
+    "placeSearchError": "Place search is unavailable right now. Tap the map to drop a pin instead.",
+    "serviceUnavailable": "Couldn't reach the map data service right now. This is not the same as nothing nearby — please try again in a minute.",
+    "searchError": "Something went wrong while searching. Please try again.",
+    "retry": "Try again",
+    "partial": "Showing places within {{km}} km — a wider search could not be completed.",
+    "directions": "Directions",
+    "youAreHere": "You are here",
+    "findingRoute": "finding route…",
+    "routeShown": "Walking route shown on map",
+    "dataSource": "Places from OpenStreetMap. Details may be incomplete — call ahead if you can.",
+    "unnamed": {
+      "doctor": "Clinic / doctor",
+      "pharmacy": "Pharmacy",
+      "hospital": "Hospital"
+    }
   },
   "language": {
     "gateTitle": "Choose your language",
     "gateHint": "You can change this at any time.",
     "gateContinue": "Continue"
+  },
+  "location": {
+    "errors": {
+      "unsupported": "This browser can't share your location. Search for a place or tap the map instead.",
+      "insecure": "Location only works on a secure (https) page.",
+      "denied": "Location access is blocked for GramSathi. Allow it in your browser or phone settings (Site settings → Location), then try again.",
+      "unavailable": "Your device couldn't work out where you are. Turn on location/GPS, move near a window, and try again.",
+      "timeout": "Finding your location took too long. Check that location/GPS is on and try again."
+    },
+    "approximate": "Your location is approximate (within about {{metres}} m). Drag the pin if it's in the wrong place."
   }
 }

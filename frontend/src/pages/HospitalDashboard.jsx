@@ -17,6 +17,10 @@ import ConfirmDialog from '../components/ui/ConfirmDialog'
 import { Field, Input, Select } from '../components/ui/Field'
 import { SkeletonList } from '../components/ui/Skeleton'
 import { EmptyState, ErrorState } from '../components/ui/States'
+import EmergencyInbox from '../components/emergency/EmergencyInbox'
+
+// Carries Leaflet, so it loads only when an emergency is actually opened.
+const EmergencyDetail = React.lazy(() => import('../components/emergency/EmergencyDetail'))
 
 /**
  * Now uses the shared page shell — it previously rendered its own H1 and
@@ -38,6 +42,8 @@ export default function HospitalDashboard() {
       <Route path="staff" element={<HealthWorkerStaff />} />
       <Route path="referrals" element={<ReferralInbox />} />
       <Route path="referrals/:referralId" element={<FacilityReferralDetail />} />
+      <Route path="emergencies" element={<EmergencyInbox />} />
+      <Route path="emergencies/:alertId" element={<EmergencyDetail />} />
       <Route path="notifications" element={<NotificationsPage />} />
       <Route path="*" element={<Navigate to="/hospital" replace />} />
     </Routes>

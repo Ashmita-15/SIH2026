@@ -132,16 +132,22 @@ export default function DoctorDetails() {
                   at /patient/appointments, a route that redirects to the
                   appointment list and drops navigation state, so the doctor
                   the patient had just chosen was silently discarded. */}
-              <p className="text-body mb-4">{t('appointments.bookWithHint')}</p>
+              {doctor.bookable === false ? (
+                <p className="text-body">{t('doctors.notBookableHelp')}</p>
+              ) : (
+                <>
+                  <p className="text-body mb-4">{t('appointments.bookWithHint')}</p>
 
-              <Button
-                block
-                onClick={() => navigate('/patient/care/book', {
-                  state: { doctor, symptoms: voice?.symptom || undefined, preferredTime: voice?.preferredTime || undefined }
-                })}
-              >
-                {t('appointments.book')}
-              </Button>
+                  <Button
+                    block
+                    onClick={() => navigate('/patient/care/book', {
+                      state: { doctor, symptoms: voice?.symptom || undefined, preferredTime: voice?.preferredTime || undefined }
+                    })}
+                  >
+                    {t('appointments.book')}
+                  </Button>
+                </>
+              )}
             </CardBody>
           </Card>
         </div>

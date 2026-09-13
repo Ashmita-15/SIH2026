@@ -57,6 +57,29 @@ export default defineConfig({
             }
           },
           {
+            /*
+             * Doctor lists change whenever a doctor opens or retires a session.
+             * Under stale-while-revalidate the cached list was always shown first,
+             * so a doctor who had just become bookable stayed missing until a
+             * later visit. Network first keeps it current online and still falls
+             * back to the last list offline.
+             */
+            urlPattern: ({ url }) =>
+              url.pathname === '/api/users/doctors' || url.pathname === '/api/users/doctors/specialization',
+            handler: 'NetworkFirst',
+            options: {
+              cacheName: 'gramsathi-doctors-cache',
+              networkTimeoutSeconds: 8,
+              expiration: {
+                maxEntries: 10,
+                maxAgeSeconds: 60 * 60 * 24 * 7
+              },
+              cacheableResponse: {
+                statuses: [0, 200]
+              }
+            }
+          },
+          {
             urlPattern: ({ url }) => {
               const pathname = url.pathname
               return (
@@ -65,8 +88,6 @@ export default defineConfig({
                 pathname.startsWith('/api/facility/meta') ||
                 pathname === '/api/health-worker/danger-rules' ||
                 pathname === '/api/pharmacy/all' ||
-                pathname === '/api/users/doctors' ||
-                pathname === '/api/users/doctors/specialization' ||
                 pathname === '/api/assistant/config'
               )
             },

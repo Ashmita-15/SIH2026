@@ -319,7 +319,7 @@ export function diagnosticCompletedEmail({ patientName, testName, resultSummary,
 
 // ─── Emergency alert ────────────────────────────────────────────────────────
 
-export function emergencyAlertEmail({ patientName, latitude, longitude, timestamp }) {
+export function emergencyAlertEmail({ patientName, latitude, longitude, timestamp, dashboardUrl }) {
     const mapsUrl = `https://www.google.com/maps?q=${latitude},${longitude}`;
     const fmtTime = timestamp
         ? new Date(timestamp).toLocaleString('en-IN', {
@@ -348,6 +348,9 @@ export function emergencyAlertEmail({ patientName, latitude, longitude, timestam
             📍 Open Patient Location in Google Maps
           </a>
         </p>
+        ${dashboardUrl ? `<p style="margin:8px 0;">
+          <a href="${dashboardUrl}" style="color:#A81E17; font-weight:bold;">Acknowledge this alert in GramSathi →</a>
+        </p>` : ''}
         <p style="margin-top:16px; padding:12px; background:#fef3f2; border-radius:6px; color:#A81E17; font-weight:500;">
           This patient triggered an emergency alert from the GramSathi app. Please respond immediately if possible.
         </p>

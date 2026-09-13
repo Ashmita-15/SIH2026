@@ -30,6 +30,37 @@ export const isValidLatLon = (lat, lon) =>
     lat >= -90 && lat <= 90 && lon >= -180 && lon <= 180;
 
 /**
+ * Place name or address to coordinates, for the "search for a place" box.
+ *
+ * @returns {Promise<Array<{lat: number, lon: number, label: string}>|null>}
+ *   [] when nothing matched, null when the lookup itself failed.
+ */
+export async function forwardGeocode(query) {
+    const q = String(query || '').trim();
+    if (q.length < 3 || q.length > 200) return [];
+
+    const url = `https://nominatim.openstreetmap.org/search?format=jsonv2&limit=5&q=${encodeURIComponent(q)}`;
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
+    try {
+        const res = await fetch(url, {
+            headers: { 'User-Agent': userAgent(), 'Accept-Language': 'en' },
+            signal: controller.signal
+        });
+        if (!res.ok) return null;
+        const body = await res.json();
+        if (!Array.isArray(body)) return null;
+        return body
+            .map(r => ({ lat: Number(r.lat), lon: Number(r.lon), label: String(r.display_name || '').slice(0, 300) }))
+            .filter(r => isValidLatLon(r.lat, r.lon));
+    } catch {
+        return null;
+    } finally {
+        clearTimeout(timer);
+    }
+}
+
+/**
  * @returns {Promise<{address: string, raw: object}|null>} null on any failure.
  */
 export async function reverseGeocode(lat, lon) {

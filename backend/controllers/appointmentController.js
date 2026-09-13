@@ -270,9 +270,21 @@ export const bookAppointment = async (req, res) => {
     }
 };
 
+const OBJECT_ID = /^[a-f0-9]{24}$/i;
+
+/**
+ * The two list endpoints below took any id from the URL and returned that
+ * person's appointments — including patients' phone numbers and symptoms — to
+ * any signed-in caller. Every screen that uses them asks for the caller's own
+ * id, so they are now scoped to exactly that.
+ */
 export const getAppointmentsForPatient = async (req, res) => {
     try {
         const { id } = req.params;
+        if (!OBJECT_ID.test(String(id))) return res.status(400).json({ message: 'Invalid patient id' });
+        if (String(req.user.id) !== String(id)) {
+            return res.status(403).json({ message: 'You can only view your own appointments' });
+        }
         const appointments = await Appointment.find({ patientId: id })
             .populate('doctorId', 'name specialization qualification availability')
             .populate(ASSISTED_POPULATE)
@@ -286,6 +298,10 @@ export const getAppointmentsForPatient = async (req, res) => {
 export const getAppointmentsForDoctor = async (req, res) => {
     try {
         const { id } = req.params;
+        if (!OBJECT_ID.test(String(id))) return res.status(400).json({ message: 'Invalid doctor id' });
+        if (req.user.role !== 'doctor' || String(req.user.id) !== String(id)) {
+            return res.status(403).json({ message: 'You can only view your own schedule' });
+        }
         const appointments = await Appointment.find({ doctorId: id })
             .populate('patientId', 'name age village email phone')
             .populate(ASSISTED_POPULATE)

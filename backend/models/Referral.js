@@ -68,6 +68,13 @@ const referralSchema = new mongoose.Schema({
     patientId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
     fromFacilityId: { type: mongoose.Schema.Types.ObjectId, ref: 'Hospital', required: true },
     toFacilityId: { type: mongoose.Schema.Types.ObjectId, ref: 'Hospital', required: true },
+    /**
+     * The hospital account the referral was addressed to — the recipient.
+     * toFacilityId above is that account's facility profile, derived on the
+     * server from User.hospitalId, never taken from the client. Absent only on
+     * referrals created before recipients were recorded.
+     */
+    toHospitalUserId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
     createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
     // The encounter this decision came out of. Optional: an emergency referral
     // can be raised before anyone has had time to write the visit up.
@@ -107,6 +114,7 @@ const referralSchema = new mongoose.Schema({
 referralSchema.index({ patientId: 1, createdAt: -1 });
 referralSchema.index({ fromFacilityId: 1, status: 1, createdAt: -1 });
 referralSchema.index({ toFacilityId: 1, status: 1, createdAt: -1 });
+referralSchema.index({ toHospitalUserId: 1, createdAt: -1 });
 // Finding what is overdue, which is what the Step 3 agent will sweep for.
 referralSchema.index({ status: 1, dueBy: 1 });
 

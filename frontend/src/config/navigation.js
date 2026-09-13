@@ -20,7 +20,8 @@ export const ICONS = {
   building:  'M4 21V8l8-5 8 5v13M9 21v-6h6v6M12 10v3m-1.5-1.5h3',
   shop:      'M4 8h16l-1 12H5L4 8zM9 8V6a3 3 0 016 0v2',
   profile:   'M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z',
-  nearby:    'M17.657 16.657L13.414 20.9a2 2 0 01-2.828 0l-4.243-4.243a8 8 0 1111.314 0zM15 11a3 3 0 11-6 0 3 3 0 016 0z'
+  nearby:    'M17.657 16.657L13.414 20.9a2 2 0 01-2.828 0l-4.243-4.243a8 8 0 1111.314 0zM15 11a3 3 0 11-6 0 3 3 0 016 0z',
+  emergency: 'M12 9v4m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z'
 }
 
 const NAV = {
@@ -47,6 +48,7 @@ const NAV = {
   ],
   hospital: [
     { key: 'overview', to: '/hospital', icon: ICONS.building, labelKey: 'nav.hospital.overview', end: true },
+    { key: 'emergencies', to: '/hospital/emergencies', icon: ICONS.emergency, labelKey: 'nav.hospital.emergencies' },
     { key: 'referrals', to: '/hospital/referrals', icon: ICONS.inbox, labelKey: 'nav.hospital.referrals' },
     { key: 'coordination', to: '/hospital/coordination', icon: ICONS.care, labelKey: 'nav.hospital.coordination' },
     { key: 'staff', to: '/hospital/staff', icon: ICONS.patients, labelKey: 'nav.hospital.staff' }

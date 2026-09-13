@@ -1,8 +1,9 @@
-import React, { useState, useCallback } from 'react'
+import React, { useState, useCallback, useRef, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useAuth } from '../context/AuthContext'
 import Modal from './ui/Modal'
 import api from '../services/api'
+import { getCurrentLocation, locationErrorKey } from '../lib/geolocation'
 
 const SERVICES = [
   { key: 'ambulance', number: '108' },
@@ -10,74 +11,116 @@ const SERVICES = [
   { key: 'health',    number: '104' }
 ]
 
+/** Reused across retries of one attempt, so a lost response cannot create a second alert. */
+const newRequestId = () =>
+  (typeof crypto !== 'undefined' && crypto.randomUUID?.()) ||
+  `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 14)}`
+
 /**
- * SOS floating button — surfaces national emergency numbers and a one-tap
- * "alert the nearest hospital" action that emails the patient's live
- * geolocation to the closest facility.
+ * SOS floating button — national emergency numbers, plus a one-tap alert to
+ * the nearest registered hospitals with the patient's live location.
+ *
+ * What the patient is told matches what the server confirmed: "sent" only
+ * when a push service or email provider accepted the alert, and never
+ * "hospital notified" on hope. The helplines stay visible in every state.
  */
 export default function EmergencyButton() {
   const { user } = useAuth()
   const { t } = useTranslation()
   const [open, setOpen] = useState(false)
 
-  // Alert-hospital flow states: idle | locating | sending | success | error
+  // idle | locating | sending | success | error
   const [alertState, setAlertState] = useState('idle')
-  const [alertResult, setAlertResult] = useState(null)   // { hospital, emailSent }
+  const [alertResult, setAlertResult] = useState(null)
   const [alertError, setAlertError] = useState('')
+  const [slow, setSlow] = useState(false)
+
+  const inFlight = useRef(false)
+  const requestId = useRef(null)
+  const slowTimer = useRef(null)
+
+  useEffect(() => () => clearTimeout(slowTimer.current), [])
 
   const resetAlert = useCallback(() => {
     setAlertState('idle')
     setAlertResult(null)
     setAlertError('')
+    setSlow(false)
   }, [])
 
   const handleClose = useCallback(() => {
     setOpen(false)
+    // A fresh attempt next time the button is opened.
+    if (!inFlight.current) requestId.current = null
     // Reset after the close animation finishes
-    setTimeout(resetAlert, 250)
+    setTimeout(() => { if (!inFlight.current) resetAlert() }, 250)
   }, [resetAlert])
 
   const handleAlertHospital = useCallback(async () => {
+    if (inFlight.current) return
+    inFlight.current = true
     resetAlert()
 
-    if (!navigator.geolocation) {
-      setAlertState('error')
-      setAlertError(t('emergency.alertHospital.unavailable'))
-      return
-    }
-
-    setAlertState('locating')
-
-    navigator.geolocation.getCurrentPosition(
-      async (position) => {
-        setAlertState('sending')
-        try {
-          const { data } = await api.post('/emergency/alert-nearest', {
-            latitude: position.coords.latitude,
-            longitude: position.coords.longitude
-          })
-          setAlertResult(data)
-          setAlertState('success')
-        } catch (err) {
-          setAlertState('error')
-          setAlertError(
-            err.response?.data?.message || t('emergency.alertHospital.error')
-          )
-        }
-      },
-      (err) => {
+    try {
+      if (typeof navigator !== 'undefined' && navigator.onLine === false) {
         setAlertState('error')
-        if (err.code === err.PERMISSION_DENIED) {
-          setAlertError(t('emergency.alertHospital.denied'))
-        } else {
-          setAlertError(t('emergency.alertHospital.unavailable'))
+        setAlertError(t('emergency.alertHospital.offline'))
+        return
+      }
+
+      setAlertState('locating')
+      let loc
+      try {
+        // A fix up to 30 s old is fine in an emergency and much faster to get.
+        loc = await getCurrentLocation({ maximumAge: 30000 })
+      } catch (err) {
+        setAlertState('error')
+        setAlertError(t(locationErrorKey(err)))
+        return
+      }
+
+      setAlertState('sending')
+      if (!requestId.current) requestId.current = newRequestId()
+      slowTimer.current = setTimeout(() => setSlow(true), 8000)
+
+      try {
+        const { data } = await api.post('/emergency/alert-nearest', {
+          latitude: loc.lat,
+          longitude: loc.lng,
+          accuracy: loc.accuracy,
+          clientRequestId: requestId.current
+        }, { timeout: 60000 })
+        setAlertResult(data)
+        setAlertState('success')
+        requestId.current = null
+      } catch (err) {
+        setAlertState('error')
+        const status = err.response?.status
+        if (!err.response) {
+          // No answer at all: the alert may or may not exist, so the same id
+          // is kept and a retry cannot duplicate it.
+          setAlertError(t('emergency.alertHospital.networkError'))
+          return
         }
-      },
-      { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
-    )
+        if (status < 500) requestId.current = null
+        if (err.response.data?.code === 'NO_FACILITY') {
+          setAlertError(t('emergency.alertHospital.noFacility', { km: err.response.data.radiusKm || 100 }))
+        } else {
+          setAlertError(t('emergency.alertHospital.error'))
+        }
+      }
+    } finally {
+      clearTimeout(slowTimer.current)
+      setSlow(false)
+      inFlight.current = false
+    }
   }, [t, resetAlert])
 
   if (!user || user.role !== 'patient') return null
+
+  const facilities = alertResult?.facilities || []
+  const confirmed = Boolean(alertResult?.delivery?.confirmed)
+  const nearest = facilities[0]
 
   return (
     <>
@@ -137,49 +180,61 @@ export default function EmergencyButton() {
               </button>
             )}
 
-            {alertState === 'locating' && (
-              <div className="flex items-center justify-center gap-2 min-h-touch text-danger-500 font-medium" role="status">
-                <svg className="w-5 h-5 animate-spin" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" />
-                </svg>
-                {t('emergency.alertHospital.locating')}
-              </div>
-            )}
-
-            {alertState === 'sending' && (
-              <div className="flex items-center justify-center gap-2 min-h-touch text-danger-500 font-medium" role="status">
-                <svg className="w-5 h-5 animate-spin" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" />
-                </svg>
-                {t('emergency.alertHospital.sending')}
+            {(alertState === 'locating' || alertState === 'sending') && (
+              <div className="flex flex-col items-center justify-center gap-1 min-h-touch text-danger-500 font-medium" role="status">
+                <span className="flex items-center gap-2">
+                  <svg className="w-5 h-5 animate-spin" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" />
+                  </svg>
+                  {alertState === 'locating' ? t('emergency.alertHospital.locating') : t('emergency.alertHospital.sending')}
+                </span>
+                {slow && <span className="text-caption text-muted text-center">{t('emergency.alertHospital.slow')}</span>}
               </div>
             )}
 
             {alertState === 'success' && alertResult && (
-              <div className="rounded-control bg-success-50 border border-success-500 p-3 animate-rise-in">
-                <div className="flex items-start gap-2">
-                  <svg className="w-5 h-5 text-success-500 shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2" aria-hidden="true">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                  </svg>
-                  <div>
-                    <p className="font-semibold text-success-600 text-small">
-                      {t('emergency.alertHospital.success')}
-                    </p>
-                    <p className="text-caption text-body mt-1">
-                      {t('emergency.alertHospital.successDetail', {
-                        hospital: alertResult.hospital?.name,
-                        distance: alertResult.hospital?.distanceKm
-                      })}
-                    </p>
-                  </div>
-                </div>
+              <div
+                className={`rounded-control border p-3 animate-rise-in ${confirmed ? 'bg-success-50 border-success-500' : 'bg-warning-50 border-warning-500'}`}
+                role="status"
+              >
+                <p className={`font-semibold text-small ${confirmed ? 'text-success-600' : 'text-warning-600'}`}>
+                  {alertResult.status === 'acknowledged'
+                    ? t('emergency.alertHospital.acknowledged')
+                    : confirmed ? t('emergency.alertHospital.sentTitle') : t('emergency.alertHospital.unconfirmedTitle')}
+                </p>
+                <p className="text-caption text-body mt-1">
+                  {confirmed
+                    ? t('emergency.alertHospital.sentDetail', { hospital: nearest?.name, distance: nearest?.distanceKm, count: alertResult.delivery?.facilitiesReached || 0 })
+                    : t('emergency.alertHospital.unconfirmedDetail')}
+                </p>
+                {alertResult.duplicate && (
+                  <p className="text-caption text-muted mt-1">{t('emergency.alertHospital.duplicate')}</p>
+                )}
+
+                {facilities.length > 0 && (
+                  <ul className="mt-3 flex flex-col gap-1.5">
+                    {facilities.map((f, i) => (
+                      <li key={i} className="flex items-center justify-between gap-2 text-caption">
+                        <span className="min-w-0">
+                          <span className="font-medium text-ink">{f.name}</span>
+                          <span className="text-muted"> · {f.distanceKm} km · {f.reached ? t('emergency.alertHospital.reached') : t('emergency.alertHospital.notReached')}</span>
+                        </span>
+                        {f.phone && (
+                          <a href={`tel:${f.phone}`} className="shrink-0 font-semibold text-danger-500 underline">
+                            {t('emergency.alertHospital.callHospital')}
+                          </a>
+                        )}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+                <p className="text-caption text-muted mt-3">{t('emergency.alertHospital.notGuaranteed')}</p>
               </div>
             )}
 
             {alertState === 'error' && (
-              <div className="rounded-control bg-danger-50 border border-danger-500 p-3 animate-rise-in">
+              <div className="rounded-control bg-danger-50 border border-danger-500 p-3 animate-rise-in" role="alert">
                 <p className="text-small text-danger-600 font-medium mb-2">{alertError}</p>
                 <button
                   type="button"

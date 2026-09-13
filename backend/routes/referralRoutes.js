@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { authRequired } from '../middleware/authMiddleware.js';
 import {
     createReferral,
+    listDestinations,
     getReferral,
     listReferrals,
     updateReferralStatus,
@@ -21,6 +22,8 @@ const router = Router();
  */
 router.post('/', authRequired, createReferral);
 router.get('/', authRequired, listReferrals);
+// Declared before /:id so "destinations" is never read as a referral id.
+router.get('/destinations', authRequired, listDestinations);
 router.get('/:id', authRequired, getReferral);
 router.patch('/:id/status', authRequired, updateReferralStatus);
 router.post('/:id/complete', authRequired, completeReferral);

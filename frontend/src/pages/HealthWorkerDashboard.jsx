@@ -987,7 +987,8 @@ function TriageSuggestion({ assessment, current, onUse }) {
 function ReferPatient({ patient, visits, facilityId, onClose, onDone }) {
   const withSigns = visits.find(v => v.dangerSigns?.length) || visits[0]
   const [form, setForm] = useState({
-    toFacilityId: '',
+    // The receiving hospital's account id — the only destination identifier sent.
+    toHospitalUserId: '',
     priority: withSigns?.dangerSigns?.length ? 'urgent_24h' : 'routine_7d',
     reason: '',
     clinicalSummary: summarise(withSigns, patient),
@@ -1022,7 +1023,7 @@ function ReferPatient({ patient, visits, facilityId, onClose, onDone }) {
     try {
       await api.post('/referrals', {
         patientId: patient._id,
-        toFacilityId: form.toFacilityId,
+        toHospitalUserId: form.toHospitalUserId,
         encounterId: form.encounterId || undefined,
         priority: form.priority,
         reason: form.reason,
@@ -1040,8 +1041,8 @@ function ReferPatient({ patient, visits, facilityId, onClose, onDone }) {
     <Modal open onClose={onClose} title={`Refer ${patient.name}`} size="lg">
       <form onSubmit={submit} className="space-y-4">
         <Field label="Where to" required>
-          {() => <FacilityPicker value={form.toFacilityId} excludeId={facilityId}
-                                 onChange={(id) => setForm(f => ({ ...f, toFacilityId: id }))} />}
+          {() => <FacilityPicker value={form.toHospitalUserId} excludeFacilityId={facilityId}
+                                 onChange={(id) => setForm(f => ({ ...f, toHospitalUserId: id }))} />}
         </Field>
 
         <TriageSuggestion assessment={triage} current={form.priority}
@@ -1083,7 +1084,7 @@ function ReferPatient({ patient, visits, facilityId, onClose, onDone }) {
         {error && <p className="error-text" role="alert">{error}</p>}
         <div className="flex gap-2 justify-end">
           <Button type="button" variant="ghost" onClick={onClose}>Cancel</Button>
-          <Button type="submit" disabled={busy || !form.toFacilityId}>{busy ? 'Sending…' : 'Send referral'}</Button>
+          <Button type="submit" disabled={busy || !form.toHospitalUserId}>{busy ? 'Sending…' : 'Send referral'}</Button>
         </div>
       </form>
     </Modal>

@@ -4,6 +4,7 @@ import Badge from './ui/Badge'
 import Avatar from './ui/Avatar'
 import { appointmentStatus, formatDate } from '../lib/status'
 import { slotLabel } from '../lib/slots'
+import { CONSULTATION_LABEL } from '../lib/consultation'
 
 /**
  * Status is a left stripe plus one badge on a neutral surface. The doctor

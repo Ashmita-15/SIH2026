@@ -51,7 +51,8 @@ export default function BookingForm({ selectedDoctor: doctorFromProps, prefillSy
 
   const load = useCallback(async () => {
     try {
-      const { data } = await api.get('/users/doctors/specialization')
+      // Booking is session-only: only doctors with an active session can be picked.
+      const { data } = await api.get('/users/doctors/specialization', { params: { bookable: true } })
       setDoctorsBySpecialty(data || {})
     } catch (err) {
       console.error('Failed to load doctors:', err)

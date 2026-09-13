@@ -9,6 +9,7 @@ import Button from '../ui/Button'
 import ConfirmDialog from '../ui/ConfirmDialog'
 import Card, { CardBody } from '../ui/Card'
 import { EmptyState } from '../ui/States'
+import { isRemote } from '../../lib/consultation'
 
 export default function AppointmentList({ appointments, onChanged, emptyAction }) {
   const { t } = useTranslation()

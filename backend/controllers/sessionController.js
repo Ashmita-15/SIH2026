@@ -88,6 +88,10 @@ export const deleteSession = async (req, res) => {
 export const getDoctorSessions = async (req, res) => {
     try {
         const { date } = req.query;
+        // A malformed id is a doctor that does not exist, not a server fault.
+        if (!/^[a-f0-9]{24}$/i.test(String(req.params.doctorId))) {
+            return res.status(404).json({ message: 'Doctor not found' });
+        }
         if (!date || Number.isNaN(new Date(date).getTime())) {
             return res.status(400).json({ message: 'A valid date is required' });
         }

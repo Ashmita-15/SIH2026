@@ -122,9 +122,13 @@ export async function deactivateAllForUser(userId) {
  * @param {string} [payload.badge] - Monochrome badge url
  * @param {string} [payload.tag] - Notification tag for deduplication / replacement
  * @param {Object} [payload.data] - Custom metadata (e.g. destination url, entityId)
+ * @param {boolean} [payload.requireInteraction] - Keep the notification on screen until acted on
+ * @param {Object} [options]
+ * @param {number} [options.ttl] - Seconds the push service may hold an undelivered message (default 24h)
+ * @param {string} [options.urgency] - 'very-low' | 'low' | 'normal' | 'high'
  * @returns {Promise<{sent: number, failed: number, total: number}>}
  */
-export async function sendPushToUser(userId, payload) {
+export async function sendPushToUser(userId, payload, options = {}) {
     if (!initVapid()) {
         return { sent: 0, failed: 0, total: 0, reason: 'vapid_not_configured' };
     }
@@ -149,6 +153,7 @@ export async function sendPushToUser(userId, payload) {
         icon: payload.icon || '/pwa-192x192.png',
         badge: payload.badge || '/logo.png',
         tag: payload.tag || `gramsathi-${Date.now()}`,
+        requireInteraction: Boolean(payload.requireInteraction),
         data: {
             url: payload.data?.url || '/',
             type: payload.data?.type || 'general',
@@ -156,6 +161,13 @@ export async function sendPushToUser(userId, payload) {
             receivedAt: new Date().toISOString()
         }
     });
+
+    const deliveryOptions = {
+        TTL: Number.isFinite(options.ttl) && options.ttl >= 0 ? options.ttl : 60 * 60 * 24 // 24 hours
+    };
+    if (['very-low', 'low', 'normal', 'high'].includes(options.urgency)) {
+        deliveryOptions.urgency = options.urgency;
+    }
 
     let sent = 0;
     let failed = 0;
@@ -170,9 +182,7 @@ export async function sendPushToUser(userId, payload) {
         };
 
         try {
-            await webpush.sendNotification(pushSubscriptionShape, notificationPayload, {
-                TTL: 60 * 60 * 24 // 24 hours
-            });
+            await webpush.sendNotification(pushSubscriptionShape, notificationPayload, deliveryOptions);
             sent++;
             sub.lastUsedAt = new Date();
             await sub.save().catch(() => {});

@@ -4,12 +4,24 @@ import { useTranslation } from 'react-i18next'
 import api, { friendlyError } from '../services/api'
 import { useAuth } from '../context/AuthContext'
 import { homePathFor } from '../config/navigation'
-import { Field, Input, Select, PasswordInput } from '../components/ui/Field'
+import { Field, Input, Select, Textarea, PasswordInput } from '../components/ui/Field'
 import Button from '../components/ui/Button'
 import Alert from '../components/ui/Alert'
+import { getCurrentLocation, locationErrorKey } from '../lib/geolocation'
+import { validateIndianMobile } from '../lib/phoneValidation'
 import logo from '../assets/images/logo.png'
 
 const ROLES = ['patient', 'doctor', 'health_worker', 'pharmacy', 'hospital']
+
+/**
+ * Accounts that are a place patients travel to. The server refuses to create
+ * one without real coordinates and an address — which this screen never used
+ * to send, so every hospital and pharmacy sign-up failed.
+ */
+const FACILITY_ROLES = ['hospital', 'pharmacy']
+
+/** A facility is registered from its premises; a fix wider than this is worth flagging. */
+const FACILITY_ACCURACY_WARN_METRES = 200
 
 /**
  * ASHA, ANM and CHO are the three frontline roles, kept as one account type
@@ -29,12 +41,17 @@ export default function LoginSignup() {
   const [formError, setFormError] = useState('')
   const [notice, setNotice] = useState('')
   const [submitting, setSubmitting] = useState(false)
+  const [facilityLoc, setFacilityLoc] = useState(null)
+  const [locating, setLocating] = useState(false)
+  const [locError, setLocError] = useState('')
 
   const navigate = useNavigate()
   const location = useLocation()
   const [params] = useSearchParams()
   const { t } = useTranslation()
   const { login } = useAuth()
+
+  const isFacility = FACILITY_ROLES.includes(form.role)
 
   useEffect(() => {
     if (params.get('expired')) setFormError(t('auth.sessionExpired'))
@@ -70,6 +87,13 @@ export default function LoginSignup() {
         if (!form.workerType) next.workerType = t('auth.errors.workerTypeRequired')
         if (!(form.village || '').trim()) next.village = t('auth.errors.villageRequired')
       }
+      if (isFacility) {
+        if (!facilityLoc) next.facilityLocation = t('auth.errors.facilityLocationRequired')
+        if (!(form.address || '').trim()) next.address = t('auth.errors.addressRequired')
+      }
+      if (form.role === 'hospital' && !validateIndianMobile(form.phone || '').isValid) {
+        next.phone = t('auth.errors.phoneInvalid')
+      }
     }
 
     setErrors(next)
@@ -81,6 +105,39 @@ export default function LoginSignup() {
     setErrors({})
     setFormError('')
     setNotice('')
+  }
+
+  /**
+   * The fix comes from the device, the address from the server's reverse
+   * geocoder. A failed lookup does not block sign-up: the address field stays
+   * editable, and the coordinates — the part patients and SOS depend on —
+   * are real either way.
+   */
+  const detectFacilityLocation = async () => {
+    setLocating(true)
+    setLocError('')
+    try {
+      const loc = await getCurrentLocation()
+      setFacilityLoc(loc)
+      setErrors(prev => ({ ...prev, facilityLocation: undefined }))
+      try {
+        const { data } = await api.get('/geo/reverse', {
+          params: { lat: loc.lat, lon: loc.lng },
+          timeout: 20000,
+          skipAuthRedirect: true
+        })
+        if (data?.address) {
+          setForm(f => ({ ...f, address: data.address }))
+          setErrors(prev => ({ ...prev, address: undefined }))
+        }
+      } catch {
+        setLocError(t('auth.addressLookupFailed'))
+      }
+    } catch (err) {
+      setLocError(t(locationErrorKey(err)))
+    } finally {
+      setLocating(false)
+    }
   }
 
   const submit = async (e) => {
@@ -117,10 +174,19 @@ export default function LoginSignup() {
           workerType: form.workerType,
           specialization: form.specialization,
           qualification: form.qualification,
-          availability: form.availability
+          availability: form.availability,
+          ...(isFacility && facilityLoc ? {
+            latitude: facilityLoc.lat,
+            longitude: facilityLoc.lng,
+            accuracy: facilityLoc.accuracy,
+            address: (form.address || '').trim()
+          } : {}),
+          ...(form.role === 'hospital' ? { phone: form.phone } : {})
         })
         // Carry the email across so signing in is one field, not two.
         setForm({ role: form.role, email: form.email })
+        setFacilityLoc(null)
+        setLocError('')
         setIsLogin(true)
         setNotice(t('auth.accountCreated'))
       }
@@ -170,21 +236,21 @@ export default function LoginSignup() {
             <form onSubmit={submit} noValidate className="flex flex-col gap-4">
               {!isLogin && (
                 <>
-                  <Field label={t('auth.name')} error={errors.name} required>
-                    {(props) => (
-                      <Input
-                        {...props} type="text" autoComplete="name"
-                        placeholder={t('auth.namePlaceholder')}
-                        value={form.name || ''} onChange={set('name')} error={errors.name}
-                      />
-                    )}
-                  </Field>
-
                   <Field label={t('auth.role')} required>
                     {(props) => (
                       <Select {...props} value={form.role} onChange={set('role')}>
                         {ROLES.map(r => <option key={r} value={r}>{t(`roles.${r}`)}</option>)}
                       </Select>
+                    )}
+                  </Field>
+
+                  <Field label={isFacility ? t('auth.facilityName') : t('auth.name')} error={errors.name} required>
+                    {(props) => (
+                      <Input
+                        {...props} type="text" autoComplete={isFacility ? 'organization' : 'name'}
+                        placeholder={isFacility ? t('auth.facilityNamePlaceholder') : t('auth.namePlaceholder')}
+                        value={form.name || ''} onChange={set('name')} error={errors.name}
+                      />
                     )}
                   </Field>
 
@@ -252,6 +318,51 @@ export default function LoginSignup() {
                         {(props) => (
                           <Input {...props} type="text" placeholder={t('auth.availabilityPlaceholder')}
                             value={form.availability || ''} onChange={set('availability')} />
+                        )}
+                      </Field>
+                    </>
+                  )}
+
+                  {isFacility && (
+                    <>
+                      {form.role === 'hospital' && (
+                        <Field label={t('auth.facilityPhone')} error={errors.phone} hint={t('auth.facilityPhoneHint')} required>
+                          {(props) => (
+                            <Input {...props} type="tel" inputMode="tel" autoComplete="tel"
+                              placeholder="98765 43210"
+                              value={form.phone || ''} onChange={set('phone')} error={errors.phone} />
+                          )}
+                        </Field>
+                      )}
+
+                      <Field label={t('auth.facilityLocation')} error={errors.facilityLocation} hint={t('auth.facilityLocationHint')} required>
+                        {(props) => (
+                          <div>
+                            <Button {...props} variant="secondary" block loading={locating} onClick={detectFacilityLocation}>
+                              {facilityLoc ? t('auth.redetectLocation') : t('auth.detectLocation')}
+                            </Button>
+                            {facilityLoc && (
+                              <p className="text-caption text-muted mt-2 tabular">
+                                {t('auth.locationCaptured', {
+                                  lat: facilityLoc.lat.toFixed(5),
+                                  lng: facilityLoc.lng.toFixed(5),
+                                  metres: facilityLoc.accuracy ?? '—'
+                                })}
+                              </p>
+                            )}
+                          </div>
+                        )}
+                      </Field>
+
+                      {locError && <Alert tone="warning">{locError}</Alert>}
+                      {facilityLoc?.accuracy > FACILITY_ACCURACY_WARN_METRES && (
+                        <Alert tone="info">{t('auth.locationApproximate', { metres: facilityLoc.accuracy })}</Alert>
+                      )}
+
+                      <Field label={t('auth.facilityAddress')} error={errors.address} hint={t('auth.facilityAddressHint')} required>
+                        {(props) => (
+                          <Textarea {...props} rows={2} value={form.address || ''}
+                            onChange={set('address')} error={errors.address} />
                         )}
                       </Field>
                     </>

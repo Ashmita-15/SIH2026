@@ -33,23 +33,58 @@ import Notification from '../../models/Notification.js';
  * @param {string} [params.entityType] - 'appointment' | 'order' | 'diagnostic' | ...
  * @param {string} [params.entityId]  - MongoDB ID of the related entity (for dedup)
  * @param {string} [params.tag]       - Web Push tag for deduplication on device
+ * @param {Object} [params.push]      - Delivery hints { requireInteraction, urgency, ttl }
  * @returns {Promise<Notification|null>}
  */
-export async function createNotification({
-    userId,
-    type = 'GENERAL',
-    title,
-    body,
-    data = {},
-    link = '/',
-    priority = 'normal',
-    entityType = 'general',
-    entityId = null,
-    tag = null
-}) {
+export async function createNotification(params) {
+    const p = withDefaults(params);
+    const { skipped, notification } = await persistNotification(p);
+    if (skipped) return null;
+
+    // Fire-and-forget: the caller's transaction never waits on a push service.
+    pushNotification(notification, p).catch(pushErr => {
+        console.error(`[notificationService/push] Push failed for user ${p.userId}:`, pushErr.message);
+    });
+
+    return notification;
+}
+
+/**
+ * Same as createNotification, but waits for the push attempt and reports it.
+ *
+ * For the few events where the caller has to tell a person what actually
+ * happened — an SOS must not say "hospital notified" on the strength of a
+ * push that was never accepted. Never throws.
+ *
+ * @returns {Promise<{notification: Notification|null, duplicate: boolean, push: {sent: number, failed: number, total: number, reason?: string}}>}
+ */
+export async function deliverNotification(params) {
+    const p = withDefaults(params);
+    const { skipped, duplicate, notification } = await persistNotification(p);
+    if (skipped) {
+        return { notification: null, duplicate, push: { sent: 0, failed: 0, total: 0, reason: duplicate ? 'duplicate' : 'invalid' } };
+    }
+
+    try {
+        return { notification, duplicate: false, push: await pushNotification(notification, p) };
+    } catch (pushErr) {
+        console.error(`[notificationService/push] Push failed for user ${p.userId}:`, pushErr.message);
+        return { notification, duplicate: false, push: { sent: 0, failed: 0, total: 0, reason: pushErr.message } };
+    }
+}
+
+function withDefaults({
+    userId, type = 'GENERAL', title, body, data = {}, link = '/', priority = 'normal',
+    entityType = 'general', entityId = null, tag = null, push = {}
+} = {}) {
+    return { userId, type, title, body, data, link, priority, entityType, entityId, tag, push: push || {} };
+}
+
+/** Validation, 5-minute deduplication and the database write shared by both creators. */
+async function persistNotification({ userId, type, title, body, data, link, priority, entityType, entityId }) {
     if (!userId || !title || !body) {
         console.warn('[notificationService] createNotification called with missing required fields:', { userId, title, body });
-        return null;
+        return { skipped: true, duplicate: false, notification: null };
     }
 
     // ── Deduplication: same (userId, type, entityId) within 5 minutes ──
@@ -65,7 +100,7 @@ export async function createNotification({
 
             if (existing) {
                 console.debug(`[notificationService] Skipping duplicate: ${type} for entity ${entityId} (userId ${userId})`);
-                return null;
+                return { skipped: true, duplicate: true, notification: null };
             }
         } catch (dedupErr) {
             console.error('[notificationService] Dedup check failed:', dedupErr.message);
@@ -73,7 +108,7 @@ export async function createNotification({
         }
     }
 
-    // ── 1. Persist to MongoDB ──
+    // ── Persist to MongoDB ──
     let notification = null;
     try {
         notification = await Notification.create({
@@ -93,11 +128,16 @@ export async function createNotification({
         // Continue with push attempt even if DB save failed
     }
 
-    // ── 2. Attempt Web Push delivery (fire-and-forget, never throws) ──
-    sendPushToUser(userId, {
+    return { skipped: false, duplicate: false, notification };
+}
+
+/** Web Push for one saved notification; marks it pushSent once any device accepted. */
+function pushNotification(notification, { userId, type, title, body, data, link, entityType, entityId, tag, push }) {
+    return sendPushToUser(userId, {
         title,
         body,
         tag: tag || `gramsathi-${type}-${entityId || Date.now()}`,
+        requireInteraction: Boolean(push.requireInteraction),
         data: {
             url: link,
             type,
@@ -106,18 +146,15 @@ export async function createNotification({
             notificationId: notification ? String(notification._id) : null,
             ...data
         }
-    }).then(result => {
+    }, { ttl: push.ttl, urgency: push.urgency }).then(result => {
         if (notification && result.sent > 0) {
             Notification.findByIdAndUpdate(notification._id, {
                 pushSent: true,
                 pushSentAt: new Date()
             }).catch(() => {});
         }
-    }).catch(pushErr => {
-        console.error(`[notificationService/push] Push failed for user ${userId}:`, pushErr.message);
+        return result;
     });
-
-    return notification;
 }
 
 // ─── Unified Multi-Channel Dispatch (legacy-compatible) ──────────────────────
@@ -457,10 +494,27 @@ export async function notifyHealthRecordUploaded({ recipient, uploadedBy, record
 
 // ─── Referrals ───────────────────────────────────────────────────────────────
 
-export async function notifyReferralCreated({ referral, patient, fromFacilityName, toFacilityEmail, toFacilityName }) {
+export async function notifyReferralCreated({ referral, patient, fromFacilityName, toFacilityEmail, toFacilityName, toHospitalUserId }) {
     const jobs = [];
     const patientId = patient?._id || patient?.id || referral?.patientId;
     const referralId = referral?._id;
+
+    // The receiving hospital account: the exact recipient the referral was
+    // addressed to. Previously it got only an email to the facility address.
+    if (toHospitalUserId) {
+        const urgent = referral?.priority === 'emergency' || referral?.priority === 'urgent_24h';
+        jobs.push(createNotification({
+            userId: toHospitalUserId,
+            type: 'REFERRAL_CREATED',
+            title: 'New Referral Received',
+            body: `A referral from ${fromFacilityName || 'another facility'} is waiting for your acknowledgement.`,
+            link: referralId ? `/#/hospital/referrals/${referralId}` : '/#/hospital/referrals',
+            priority: urgent ? 'urgent' : 'high',
+            entityType: 'referral',
+            entityId: referralId ? String(referralId) : null,
+            data: { referralId: String(referralId || '') }
+        }).catch(() => {}));
+    }
 
     if (patientId) {
         jobs.push(createNotification({
@@ -729,8 +783,112 @@ export async function notifyPharmacyOrderStatus({ order, status, note }) {
     }).catch(() => {});
 }
 
+// ─── Emergency SOS ───────────────────────────────────────────────────────────
+
+/**
+ * Alerts the facilities an SOS was routed to, and reports what was accepted.
+ *
+ * The push and in-app text says only that an emergency exists. The patient's
+ * name and exact location are behind the authenticated emergency page — a
+ * lock screen is not the place for them. The facility's registered email
+ * (the existing channel) still carries the location, as it did before.
+ *
+ * "Reached" means a push service or email provider accepted the message. It
+ * is not proof a person has seen it, and callers must not present it as such.
+ *
+ * @param {Object} params
+ * @param {EmergencyAlert} params.alert
+ * @param {string} params.patientName
+ * @param {Array<{hospital: Object}>} params.facilities - lean Hospital docs with ownerId and email
+ */
+export async function notifyEmergencySOS({ alert, patientName, facilities }) {
+    const alertId = String(alert._id);
+    const [longitude, latitude] = alert.location.coordinates;
+    const base = String(process.env.FRONTEND_URL || '').replace(/\/+$/, '');
+    const dashboardUrl = /^https?:\/\//.test(base) ? `${base}/#/hospital/emergencies/${alertId}` : null;
+
+    const settled = await Promise.allSettled(facilities.map(async ({ hospital }) => {
+        const [inApp, email] = await Promise.all([
+            deliverNotification({
+                userId: hospital.ownerId,
+                type: 'EMERGENCY_SOS',
+                title: 'Emergency SOS Alert',
+                body: 'An emergency request has been received. Open GramSathi to view the emergency details and location.',
+                link: `/#/hospital/emergencies/${alertId}`,
+                priority: 'urgent',
+                entityType: 'emergency',
+                entityId: alertId,
+                tag: `sos-${alertId}`,
+                data: { alertId },
+                // An hour-old SOS arriving on a phone that was off helps nobody.
+                push: { requireInteraction: true, urgency: 'high', ttl: 60 * 60 }
+            }),
+            hospital.email
+                ? sendMail({
+                    to: hospital.email,
+                    ...templates.emergencyAlertEmail({
+                        patientName, latitude, longitude, timestamp: alert.createdAt, dashboardUrl
+                    })
+                })
+                : Promise.resolve({ sent: false, reason: 'no_email' })
+        ]);
+        return {
+            hospitalId: hospital._id,
+            inAppCreated: Boolean(inApp.notification),
+            pushSent: inApp.push?.sent || 0,
+            pushFailed: inApp.push?.failed || 0,
+            emailSent: Boolean(email?.sent)
+        };
+    }));
+
+    const results = settled.map((r, i) => {
+        if (r.status === 'fulfilled') return r.value;
+        console.error('[notificationService/sos] Facility notification failed:', r.reason?.message);
+        return { hospitalId: facilities[i].hospital._id, inAppCreated: false, pushSent: 0, pushFailed: 0, emailSent: false };
+    });
+
+    const delivery = {
+        inAppCreated: results.filter(r => r.inAppCreated).length,
+        pushDevicesAccepted: results.reduce((n, r) => n + r.pushSent, 0),
+        pushFailed: results.reduce((n, r) => n + r.pushFailed, 0),
+        emailsAccepted: results.filter(r => r.emailSent).length
+    };
+    delivery.confirmed = delivery.pushDevicesAccepted > 0 || delivery.emailsAccepted > 0;
+
+    return {
+        facilities: results.map(r => ({ hospitalId: r.hospitalId, reached: r.pushSent > 0 || r.emailSent })),
+        delivery
+    };
+}
+
+/** Tells the patient a facility acknowledged or closed their SOS. */
+export async function notifyEmergencyStatusChanged({ alert, status, facilityName }) {
+    const alertId = String(alert._id);
+    const name = facilityName || 'The hospital';
+    const copy = status === 'acknowledged'
+        ? { title: 'Emergency alert acknowledged', body: `${name} has acknowledged your emergency alert.` }
+        : { title: 'Emergency alert closed', body: `${name} marked your emergency alert as resolved.` };
+
+    return createNotification({
+        userId: alert.patientId,
+        type: 'EMERGENCY_SOS_UPDATE',
+        ...copy,
+        link: '/#/patient',
+        priority: 'urgent',
+        entityType: 'emergency',
+        // Status in the key: acknowledge then resolve within five minutes are two events.
+        entityId: `${alertId}:${status}`,
+        tag: `sos-${alertId}`,
+        data: { alertId, status },
+        push: { urgency: 'high', ttl: 60 * 60 }
+    });
+}
+
 export default {
     createNotification,
+    deliverNotification,
+    notifyEmergencySOS,
+    notifyEmergencyStatusChanged,
     sendNotification,
     sendPushToUser,
     sendPushToUsers,

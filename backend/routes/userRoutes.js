@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { authRequired } from '../middleware/authMiddleware.js';
-import { getUserProfile, updateUserProfile, updatePassword, getDoctors, getDoctorsBySpecialization } from '../controllers/userController.js';
+import { getUserProfile, updateUserProfile, updatePassword, getDoctors, getDoctorsBySpecialization, getDoctorProfile } from '../controllers/userController.js';
 
 const router = Router();
 
@@ -11,7 +11,7 @@ router.get('/doctors/specialization', authRequired, getDoctorsBySpecialization);
 router.get('/doctors', authRequired, getDoctors);
 
 // Get individual doctor by ID
-router.get('/doctor/:id', authRequired, getUserProfile);
+router.get('/doctor/:id', authRequired, getDoctorProfile);
 
 // Get user profile
 router.get('/:id', authRequired, getUserProfile);

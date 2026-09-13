@@ -89,9 +89,9 @@ export const fingerprintOf = (d) => !d ? '' : [
 /** A doctor, a day and one of that doctor's sessions. Nothing else books. */
 export const isComplete = (d) => Boolean(d?.doctorId && d?.requestedDate && d?.sessionId)
 
-/** Real doctors, from the endpoint the doctors page already uses. */
+/** Real doctors a patient can book now, from the endpoint the doctors page already uses. */
 export async function fetchDoctors() {
-  const { data } = await api.get('/users/doctors/specialization')
+  const { data } = await api.get('/users/doctors/specialization', { params: { bookable: true } })
   return Object.values(data || {}).flat().filter(d => d?._id)
 }
 

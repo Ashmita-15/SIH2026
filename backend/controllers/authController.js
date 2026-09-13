@@ -3,6 +3,7 @@ import jwt from 'jsonwebtoken';
 import User from '../models/User.js';
 import Hospital from '../models/Hospital.js';
 import { isValidLatLon } from '../services/geocode.js';
+import { validateIndianMobile } from '../utils/phoneValidation.js';
 
 /** Roles that represent a physical place patients travel to. */
 const FACILITY_ROLES = ['hospital', 'pharmacy'];
@@ -10,7 +11,7 @@ import { notifyAccountCreated } from '../services/notifications/notificationServ
 export const register = async (req, res) => {
     try {
         const { name, email, password, role, age, village, specialization, qualification, availability, workerType,
-            latitude, longitude, accuracy, address } = req.body;
+            latitude, longitude, accuracy, address, phone } = req.body;
         const existing = await User.findOne({ email });
         if (existing) return res.status(400).json({ message: 'Email already registered' });
 
@@ -61,16 +62,54 @@ export const register = async (req, res) => {
             };
         }
 
+        // A hospital record requires a contact number, and it is the number an
+        // SOS patient is shown to call.
+        let facilityPhone = null;
+        if (role === 'hospital') {
+            const checked = validateIndianMobile(String(phone || ''));
+            if (!checked.isValid) {
+                return res.status(400).json({ message: 'A valid 10-digit contact number for the hospital is required' });
+            }
+            facilityPhone = checked.normalized;
+        }
+
         const passwordHash = await bcrypt.hash(password, 10);
 
         let user;
         if (FACILITY_ROLES.includes(role)) {
             // The facility's own profile is completed later; what it cannot be
             // missing is where it is.
-            user = await User.create({ name, email, passwordHash, role, ...facility });
+            user = await User.create({
+                name, email, passwordHash, role, ...facility,
+                ...(facilityPhone ? { phone: facilityPhone } : {})
+            });
 
-            // For hospital registration, we need additional info in a separate endpoint
-            // since hospital has more fields than what's collected during basic registration
+            /**
+             * Nothing in the app ever created a hospital account's Hospital
+             * record, so its profile page said "not found" and the SOS search —
+             * which reads Hospital — could never route an emergency to it. It is
+             * created here from what sign-up has just validated; if that fails
+             * the account is removed rather than left half-made.
+             */
+            if (role === 'hospital') {
+                try {
+                    const hospital = await Hospital.create({
+                        name,
+                        email,
+                        phone: facilityPhone,
+                        address: facility.facilityAddress,
+                        location: facility.facilityLocation,
+                        ownerId: user._id
+                    });
+                    await User.updateOne({ _id: user._id }, { hospitalId: hospital._id });
+                } catch (err) {
+                    await User.deleteOne({ _id: user._id }).catch(() => {});
+                    if (err.code === 11000) {
+                        return res.status(400).json({ message: 'A hospital with this email is already registered' });
+                    }
+                    throw err;
+                }
+            }
         } else if (role === 'health_worker') {
             user = await User.create({
                 name, email, passwordHash, role, workerType,

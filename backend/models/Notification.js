@@ -35,6 +35,9 @@ const NOTIFICATION_TYPES = [
     // Referrals
     'REFERRAL_CREATED',
     'REFERRAL_UPDATED',
+    // Emergency SOS
+    'EMERGENCY_SOS',
+    'EMERGENCY_SOS_UPDATE',
     // Account / General
     'ACCOUNT_CREATED',
     'SYSTEM_ALERT',
@@ -50,6 +53,7 @@ const ENTITY_TYPES = [
     'health_record',
     'referral',
     'session',
+    'emergency',
     'account',
     'general'
 ];

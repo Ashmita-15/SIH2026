@@ -21,6 +21,14 @@ export const createReferral = async (req, res) => {
     }
 };
 
+export const listDestinations = async (req, res) => {
+    try {
+        res.json(await referralService.listDestinations(req.query, context(req)));
+    } catch (e) {
+        sendError(res, e);
+    }
+};
+
 export const getReferral = async (req, res) => {
     try {
         const referral = await referralService.getReferralById(req.params.id, context(req));
