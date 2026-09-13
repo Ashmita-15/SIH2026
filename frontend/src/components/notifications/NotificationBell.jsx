@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import {
     isPushSupported,
@@ -237,6 +238,68 @@ export default function NotificationBell({ className = '' }) {
     const [isOpen, setIsOpen] = useState(false);
     const [showSettings, setShowSettings] = useState(false);
     const popoverRef = useRef(null);
+    const triggerRef = useRef(null);
+    const panelRef = useRef(null);
+
+    /**
+     * The panel is positioned from the bell's own rectangle and rendered into
+     * document.body.
+     *
+     * It used to be an `absolute` child of the bell. That put it inside the
+     * app header, which is `sticky z-30` — a stacking context the panel could
+     * never escape however high its own z-index went — and inside the desktop
+     * sidebar, whose nav is `overflow-y-auto` and clipped it outright. Fixed
+     * positioning in a portal is subject to neither.
+     */
+    const [anchor, setAnchor] = useState(null);
+
+    const place = useCallback(() => {
+        const rect = triggerRef.current?.getBoundingClientRect();
+        const vw = window.innerWidth;
+        const vh = window.innerHeight;
+        // Nothing is laid out yet; a position computed now would be wrong and
+        // would stick. The rAF below tries again.
+        if (!rect || !vw || !vh) return;
+
+        const margin = 8;
+        const width = Math.min(384, vw - margin * 2);
+
+        /**
+         * Right-aligned to the bell, then clamped into the viewport.
+         *
+         * The clamp is the point. This app puts the bell at the top of a
+         * left-hand sidebar, so aligning the panel's right edge to the bell
+         * hangs most of it off the left of the screen — which is exactly how
+         * it was appearing. `left` is computed explicitly so both edges can be
+         * held inside the window whichever side the bell is on.
+         */
+        const left = Math.max(margin, Math.min(rect.right - width, vw - width - margin));
+
+        setAnchor({
+            top: Math.max(margin, rect.bottom + margin),
+            left,
+            width,
+            // Whatever is left below the bell. The list inside already scrolls.
+            maxHeight: Math.max(200, vh - rect.bottom - margin * 3)
+        });
+    }, []);
+
+    useEffect(() => {
+        if (!isOpen) return;
+        place();
+        // Again after layout settles — the first call can land before the
+        // panel's own fonts and the surrounding chrome have sized.
+        const raf = requestAnimationFrame(place);
+        // `true` captures scrolls in the sticky header and sidebar too, not
+        // just the window, so the panel tracks the bell rather than detaching.
+        window.addEventListener('resize', place);
+        window.addEventListener('scroll', place, true);
+        return () => {
+            cancelAnimationFrame(raf);
+            window.removeEventListener('resize', place);
+            window.removeEventListener('scroll', place, true);
+        };
+    }, [isOpen, place]);
 
     const {
         notifications,
@@ -264,7 +327,11 @@ export default function NotificationBell({ className = '' }) {
     // Close on outside click or Escape
     useEffect(() => {
         const onClickOutside = (e) => {
-            if (popoverRef.current && !popoverRef.current.contains(e.target)) setIsOpen(false);
+            // The panel is portalled, so it is not inside popoverRef any more —
+            // without this second test every click inside it closed the panel.
+            const inTrigger = popoverRef.current?.contains(e.target);
+            const inPanel = panelRef.current?.contains(e.target);
+            if (!inTrigger && !inPanel) setIsOpen(false);
         };
         const onKeyDown = (e) => { if (e.key === 'Escape') setIsOpen(false); };
 
@@ -296,6 +363,7 @@ export default function NotificationBell({ className = '' }) {
             <button
                 type="button"
                 id="notification-bell-btn"
+                ref={triggerRef}
                 onClick={handleOpen}
                 aria-label={`Notifications${unreadCount > 0 ? `, ${unreadCount} unread` : ''}`}
                 aria-haspopup="true"
@@ -319,13 +387,27 @@ export default function NotificationBell({ className = '' }) {
             </button>
 
             {/* ── Dropdown panel ── */}
-            {isOpen && (
+            {isOpen && anchor && createPortal(
                 <div
                     id="notification-center-panel"
+                    ref={panelRef}
                     role="dialog"
                     aria-label="Notification Center"
-                    className="absolute right-0 mt-2 w-80 sm:w-96 bg-surface rounded-card border border-line shadow-raised z-50 text-left animate-rise-in overflow-hidden"
-                    style={{ maxHeight: '85vh', display: 'flex', flexDirection: 'column' }}
+                    className="fixed bg-surface rounded-card border border-line shadow-raised text-left animate-rise-in overflow-hidden"
+                    style={{
+                        top: anchor.top,
+                        left: anchor.left,
+                        width: anchor.width,
+                        // A CSS cap as well as the measured width: if a
+                        // viewport change ever lands without a resize event,
+                        // the panel narrows instead of hanging off the screen.
+                        maxWidth: 'calc(100vw - 1rem)',
+                        maxHeight: anchor.maxHeight,
+                        // Above the sticky header (z-40) and the app's overlays.
+                        zIndex: 120,
+                        display: 'flex',
+                        flexDirection: 'column'
+                    }}
                 >
                     {showSettings ? (
                         <PushSettingsPanel onBack={() => setShowSettings(false)} />
@@ -452,7 +534,8 @@ export default function NotificationBell({ className = '' }) {
                             </div>
                         </>
                     )}
-                </div>
+                </div>,
+                document.body
             )}
         </div>
     );

@@ -25,7 +25,15 @@ export const FACILITY_CAPABILITIES = [
 const hospitalSchema = new mongoose.Schema({
     name: { type: String, required: true },
     email: { type: String, required: true, unique: true },
-    phone: { type: String, required: true },
+    /**
+     * Not required. A facility that signs itself up has a name and an email
+     * before it has anything else, and refusing to create its record until it
+     * has a phone number is what left self-registered hospitals with no
+     * facility at all — and therefore no dashboard, no inbox and no referrals.
+     * `isActive` is what gates routing; missing contact details make a record
+     * incomplete, not invalid.
+     */
+    phone: { type: String },
     location: {
         type: {
             type: String,
@@ -33,11 +41,14 @@ const hospitalSchema = new mongoose.Schema({
             default: 'Point'
         },
         coordinates: {
+            // Same reasoning as `phone`: a record without coordinates cannot be
+            // routed to, which `isActive` expresses, but it must still exist so
+            // its owner can sign in and complete it.
             type: [Number], // [longitude, latitude]
-            required: true
+            default: undefined
         }
     },
-    address: { type: String, required: true },
+    address: { type: String },
     description: { type: String, default: '' },
     image: { type: String, default: '' },
     isActive: { type: Boolean, default: true },

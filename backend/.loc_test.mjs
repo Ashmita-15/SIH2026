@@ -28,7 +28,11 @@ const run = async () => {
 
     // ── the manual path, which is what unblocks the reported failure ─────
     const s = await fetch(`${API}/geo/search?q=${encodeURIComponent('Civil Hospital Ludhiana Punjab')}`);
-    const found = await s.json();
+    // Post-merge contract: a ranked list. Sign-up takes the first result.
+    const body = await s.json();
+    const found = body?.results?.[0]
+        ? { latitude: body.results[0].lat, longitude: body.results[0].lon, address: body.results[0].label }
+        : {};
     ok('manual address resolves to coordinates', s.status === 200 &&
         Number.isFinite(found.latitude) && Number.isFinite(found.longitude) && found.address?.length > 10,
         `${found.latitude}, ${found.longitude}`);
@@ -40,18 +44,24 @@ const run = async () => {
     ok('no key or secret in the response', !JSON.stringify(found).toLowerCase().includes('key'));
 
     for (const [label, q, want] of [
-        ['nothing matches', 'zzzqqqnowhere12345', 404],
         ['too short', 'ab', 400],
         ['blank', '', 400]
     ]) {
         const r = await fetch(`${API}/geo/search?q=${encodeURIComponent(q)}`);
         ok(`search ${label} -> ${want}`, r.status === want, String(r.status));
     }
+    // No match is now an empty list, not a 404.
+    const none = await fetch(`${API}/geo/search?q=zzzqqqnowhere12345`);
+    const noneBody = await none.json();
+    ok('search nothing matches -> 200 with empty results',
+        none.status === 200 && Array.isArray(noneBody.results) && noneBody.results.length === 0,
+        `${none.status} ${JSON.stringify(noneBody).slice(0, 60)}`);
 
     // Hospital, registered purely from a typed address (no GPS at all).
     const hEmail = `loc-hosp-${stamp}@example.com`;
     const h = await reg({
         name: 'Manual Hospital', email: hEmail, password: 'password123', role: 'hospital',
+        phone: '9876543210',
         latitude: found.latitude, longitude: found.longitude, address: found.address
         // accuracy deliberately absent: a typed address has no radius
     });
@@ -87,6 +97,7 @@ const run = async () => {
     const gEmail = `loc-gps-${stamp}@example.com`;
     const g = await reg({
         name: 'GPS Hospital', email: gEmail, password: 'password123', role: 'hospital',
+        phone: '9876543210',
         latitude: GLAT, longitude: GLON, accuracy: 1200, address: revBody.address
     });
     ok('hospital signup via GPS succeeds', g.status === 201, String(g.status));
@@ -102,7 +113,7 @@ const run = async () => {
     ]) {
         const r = await reg({
             name: 'Loc Reject', email: `loc-rej-${stamp}-${Math.random()}@example.com`,
-            password: 'password123', role: 'hospital', ...extra
+            password: 'password123', role: 'hospital', phone: '9876543210', ...extra
         });
         ok(`still refused: ${label}`, r.status === 400, `${r.status} ${r.body?.message}`);
     }
