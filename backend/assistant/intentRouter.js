@@ -38,7 +38,7 @@ export const INTENTS = {
     VIEW_APPOINTMENTS: {
         // Appointments live on the Care page; /patient/appointments only
         // redirects there, so the canonical route is used directly.
-        route: '/patient/care',
+        route: '/patient/care/doctors',
         spoken: {
             en: 'Opening your appointments.',
             hi: 'आपकी अपॉइंटमेंट दिखा रहा हूँ।',
