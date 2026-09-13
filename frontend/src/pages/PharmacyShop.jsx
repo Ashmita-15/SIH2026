@@ -37,7 +37,11 @@ export default function PharmacyShop() {
   const [loadError, setLoadError] = useState(false)
 
   useEffect(() => {
-    const socket = io(SOCKET_URL)
+    const socket = io(SOCKET_URL, {
+      reconnectionAttempts: 5,
+      reconnectionDelay: 2500,
+      timeout: 10000
+    })
     
     // Subscribe to real-time stock updates for this pharmacy
     socket.emit('subscribe-pharmacy-updates', pharmacyId)
@@ -200,8 +204,9 @@ export default function PharmacyShop() {
 
   return (
     <PageLayout title={pharmacy.name}>
-      {/* Pharmacy Header */}
-      <div className="card mb-6">
+      <div className="pb-28 sm:pb-32">
+        {/* Pharmacy Header */}
+        <div className="card mb-6">
         <div className="card-body">
           <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-6">
             <div className="min-w-0">
@@ -494,14 +499,15 @@ export default function PharmacyShop() {
         </div>
       )}
 
-      {!user && (
-        <div className="mt-8 text-center">
-          <div className="text-muted mb-4">Please login as a patient to add medicines to cart</div>
-          <Link to="/login" className="btn btn-primary">
-            Login
-          </Link>
-        </div>
-      )}
+        {!user && (
+          <div className="mt-8 text-center">
+            <div className="text-muted mb-4">Please login as a patient to add medicines to cart</div>
+            <Link to="/login" className="btn btn-primary">
+              Login
+            </Link>
+          </div>
+        )}
+      </div>
     </PageLayout>
   )
 }

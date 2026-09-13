@@ -63,7 +63,7 @@ const run = async () => {
         email: 'rajesh@pharmacy.com', 
         passwordHash: pw, 
         role: 'pharmacy',
-        phone: '+91-9999999999'
+        phone: '+91-98765-43210'
     });
 
     // Create second pharmacy owner
@@ -72,7 +72,7 @@ const run = async () => {
         email: 'suresh@pharmacy.com', 
         passwordHash: pw, 
         role: 'pharmacy',
-        phone: '+91-8888888888'
+        phone: '+91-98140-54321'
     });
 
     // Create hospital user
@@ -81,7 +81,7 @@ const run = async () => {
         email: 'hospital@example.com', 
         passwordHash: pw, 
         role: 'hospital',
-        phone: '+91-7777777777'
+        phone: '+91-98140-12345'
     });
 
     // Create first pharmacy (not associated with hospital)
@@ -89,7 +89,7 @@ const run = async () => {
         name: 'Gram Pharmacy & Medical Store', 
         location: 'Sundarpur', 
         address: 'Main Bazaar, Sundarpur Village, District Ludhiana, Punjab - 141001',
-        contact: '+91-9999999999',
+        contact: '+91-98765-43210',
         email: 'gram.pharmacy@example.com',
         description: 'Your trusted neighborhood pharmacy providing quality medicines at affordable prices. We stock all essential medicines and provide home delivery within 5km radius.',
         deliveryAvailable: true,
@@ -103,7 +103,7 @@ const run = async () => {
         name: 'Apollo Hospital Pharmacy', 
         location: 'Apollo Hospital Campus', 
         address: 'Apollo Hospital, Main Road, Sundarpur, District Ludhiana, Punjab - 141001',
-        contact: '+91-8888888888',
+        contact: '+91-98140-54321',
         email: 'apollo.pharmacy@example.com',
         description: 'Pharmacy located inside Apollo Hospital, providing medicines for in-patients and out-patients.',
         deliveryAvailable: true,

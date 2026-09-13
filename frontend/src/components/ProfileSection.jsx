@@ -10,6 +10,7 @@ import Modal from './ui/Modal'
 import { Field, Input, Textarea, PasswordInput } from './ui/Field'
 import { SkeletonCard } from './ui/Skeleton'
 import { ErrorState } from './ui/States'
+import NotificationCard from './notifications/NotificationCard.jsx'
 
 export default function ProfileSection() {
   const { t } = useTranslation()
@@ -206,6 +207,9 @@ export default function ProfileSection() {
           )}
         </CardBody>
       </Card>
+
+      {/* Device Notifications Settings Card */}
+      <NotificationCard className="mt-6" />
 
       {/* The password endpoint existed from the start but had no UI anywhere. */}
       <Modal

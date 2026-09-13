@@ -1,4 +1,6 @@
 import React, { createContext, useContext, useState, useCallback, useMemo, useEffect } from 'react'
+import { clearAllUserData } from '../lib/offline/db.js'
+import { handleLogoutPushCleanup } from '../lib/pushNotifications.js'
 
 const AuthContext = createContext(null)
 
@@ -32,11 +34,18 @@ export function AuthProvider({ children }) {
   }, [])
 
   const logout = useCallback(() => {
+    const currentUserId = user?.id || user?._id
+    if (currentUserId) {
+      clearAllUserData(currentUserId).catch(err => console.error('[Auth] Error clearing user data:', err))
+    }
+    // Clean up push subscription association for shared devices
+    handleLogoutPushCleanup().catch(err => console.debug('[Auth] Push cleanup on logout:', err))
     localStorage.removeItem(TOKEN_KEY)
     localStorage.removeItem(USER_KEY)
+    sessionStorage.clear()
     setToken(null)
     setUser(null)
-  }, [])
+  }, [user])
 
   const updateUser = useCallback((patch) => {
     setUser(prev => {
@@ -54,14 +63,21 @@ export function AuthProvider({ children }) {
         setUser(readUser())
       }
     }
-    const onUnauthorized = () => { setToken(null); setUser(null) }
+    const onUnauthorized = () => {
+      const currentUserId = user?.id || user?._id
+      if (currentUserId) {
+        clearAllUserData(currentUserId).catch(() => {})
+      }
+      setToken(null)
+      setUser(null)
+    }
     window.addEventListener('storage', onStorage)
     window.addEventListener('auth:unauthorized', onUnauthorized)
     return () => {
       window.removeEventListener('storage', onStorage)
       window.removeEventListener('auth:unauthorized', onUnauthorized)
     }
-  }, [])
+  }, [user])
 
   const value = useMemo(() => ({
     user,

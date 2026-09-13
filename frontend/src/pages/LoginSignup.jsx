@@ -7,12 +7,17 @@ import { homePathFor } from '../config/navigation'
 import { Field, Input, Select, PasswordInput } from '../components/ui/Field'
 import Button from '../components/ui/Button'
 import Alert from '../components/ui/Alert'
+import { validateIndianMobile } from '../lib/phoneValidation'
 import logo from '../assets/images/logo.png'
 import FacilityLocation from '../components/auth/FacilityLocation'
 
 const ROLES = ['patient', 'doctor', 'health_worker', 'pharmacy', 'hospital']
 
-/** Roles that are a physical place, and so are asked where they are. */
+/**
+ * Accounts that are a place patients travel to, and so are asked where they
+ * are. The server refuses to create one without real coordinates and an
+ * address.
+ */
 const FACILITY_ROLES = ['hospital', 'pharmacy']
 
 /**
@@ -41,6 +46,8 @@ export default function LoginSignup() {
   const [params] = useSearchParams()
   const { t } = useTranslation()
   const { login } = useAuth()
+
+  const isFacility = FACILITY_ROLES.includes(form.role)
 
   useEffect(() => {
     if (params.get('expired')) setFormError(t('auth.sessionExpired'))
@@ -77,8 +84,13 @@ export default function LoginSignup() {
         if (!(form.village || '').trim()) next.village = t('auth.errors.villageRequired')
       }
       // A facility patients cannot be routed to is not a usable listing.
-      if (FACILITY_ROLES.includes(form.role) && !facilityLoc?.address) {
+      // FacilityLocation only reports a value once it has both coordinates
+      // and an address, so this one check covers both.
+      if (isFacility && !facilityLoc?.address) {
         next.facilityLocation = t('auth.location.required')
+      }
+      if (form.role === 'hospital' && !validateIndianMobile(form.phone || '').isValid) {
+        next.phone = t('auth.errors.phoneInvalid')
       }
     }
 
@@ -92,6 +104,7 @@ export default function LoginSignup() {
     setFormError('')
     setNotice('')
   }
+
 
   const submit = async (e) => {
     e.preventDefault()
@@ -129,15 +142,17 @@ export default function LoginSignup() {
           qualification: form.qualification,
           availability: form.availability,
           // Sent only for the roles that were asked; re-validated server-side.
-          ...(FACILITY_ROLES.includes(form.role) && facilityLoc ? {
+          ...(isFacility && facilityLoc ? {
             latitude: facilityLoc.latitude,
             longitude: facilityLoc.longitude,
             accuracy: facilityLoc.accuracy,
             address: facilityLoc.address
-          } : {})
+          } : {}),
+          ...(form.role === 'hospital' ? { phone: form.phone } : {})
         })
         // Carry the email across so signing in is one field, not two.
         setForm({ role: form.role, email: form.email })
+        setFacilityLoc(null)
         setIsLogin(true)
         setNotice(t('auth.accountCreated'))
       }
@@ -187,21 +202,21 @@ export default function LoginSignup() {
             <form onSubmit={submit} noValidate className="flex flex-col gap-4">
               {!isLogin && (
                 <>
-                  <Field label={t('auth.name')} error={errors.name} required>
-                    {(props) => (
-                      <Input
-                        {...props} type="text" autoComplete="name"
-                        placeholder={t('auth.namePlaceholder')}
-                        value={form.name || ''} onChange={set('name')} error={errors.name}
-                      />
-                    )}
-                  </Field>
-
                   <Field label={t('auth.role')} required>
                     {(props) => (
                       <Select {...props} value={form.role} onChange={set('role')}>
                         {ROLES.map(r => <option key={r} value={r}>{t(`roles.${r}`)}</option>)}
                       </Select>
+                    )}
+                  </Field>
+
+                  <Field label={isFacility ? t('auth.facilityName') : t('auth.name')} error={errors.name} required>
+                    {(props) => (
+                      <Input
+                        {...props} type="text" autoComplete={isFacility ? 'organization' : 'name'}
+                        placeholder={isFacility ? t('auth.facilityNamePlaceholder') : t('auth.namePlaceholder')}
+                        value={form.name || ''} onChange={set('name')} error={errors.name}
+                      />
                     )}
                   </Field>
 
@@ -271,6 +286,20 @@ export default function LoginSignup() {
                             value={form.availability || ''} onChange={set('availability')} />
                         )}
                       </Field>
+                    </>
+                  )}
+
+                  {isFacility && (
+                    <>
+                      {form.role === 'hospital' && (
+                        <Field label={t('auth.facilityPhone')} error={errors.phone} hint={t('auth.facilityPhoneHint')} required>
+                          {(props) => (
+                            <Input {...props} type="tel" inputMode="tel" autoComplete="tel"
+                              placeholder="98765 43210"
+                              value={form.phone || ''} onChange={set('phone')} error={errors.phone} />
+                          )}
+                        </Field>
+                      )}
                     </>
                   )}
                 </>

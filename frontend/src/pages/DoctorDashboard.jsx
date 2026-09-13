@@ -11,6 +11,7 @@ import PatientTracker from '../components/PatientTracker'
 import ProfileSection from '../components/ProfileSection'
 import Button from '../components/ui/Button'
 import { Loading } from '../components/ui/States'
+import NotificationsPage from './NotificationsPage'
 
 const VideoCall = lazy(() => import('../components/VideoCall'))
 
@@ -30,6 +31,7 @@ export default function DoctorDashboard() {
       <Route path="profile" element={<ProfileRoute />} />
       <Route path="call/:appointmentId" element={<CallRoute />} />
       <Route path="consultation/:appointmentId" element={<LegacyCallRedirect />} />
+      <Route path="notifications" element={<NotificationsPage />} />
       <Route path="*" element={<Navigate to="/doctor" replace />} />
     </Routes>
   )

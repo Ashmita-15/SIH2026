@@ -26,8 +26,12 @@ import referralRoutes from './routes/referralRoutes.js';
 import taskRoutes from './routes/taskRoutes.js';
 import symptomCheckerRoutes from './routes/symptomCheckerRoutes.js';
 import userRoutes from './routes/userRoutes.js';
+import notificationRoutes from './routes/notificationRoutes.js';
+import { handleRazorpayWebhook } from './controllers/pharmacyController.js';
+import emergencyRoutes from './routes/emergencyRoutes.js';
 
 dotenv.config();
+
 
 const app = express();
 const server = http.createServer(app);
@@ -42,9 +46,18 @@ const allowedOrigins = [
     'https://sih-2026-roan.vercel.app'
 ];
 
+const checkOrigin = (origin, callback) => {
+    // Allow requests with no origin (like mobile apps or curl requests)
+    if (!origin) return callback(null, true);
+    if (allowedOrigins.includes(origin) || /^https:\/\/[\w-]+\.vercel\.app$/.test(origin)) {
+        return callback(null, true);
+    }
+    return callback(new Error(`Origin ${origin} not allowed by CORS`));
+};
+
 const io = new SocketIOServer(server, {
     cors: {
-        origin: allowedOrigins,
+        origin: checkOrigin,
         methods: ['GET', 'POST'],
         credentials: true
     }
@@ -55,7 +68,7 @@ await connectDB();
 
 // Middleware
 app.use(cors({
-    origin: allowedOrigins,
+    origin: checkOrigin,
     credentials: true
 }));
 app.use(morgan('dev'));
@@ -64,7 +77,11 @@ app.use(morgan('dev'));
 // and declares its own, larger body limit. Every other route keeps 100kb.
 app.use('/api/assistant', assistantRoutes);
 
-app.use(express.json());
+app.use(express.json({
+    verify: (req, res, buf) => {
+        req.rawBody = buf;
+    }
+}));
 app.use(attachSocketIO(io)); // Attach socket.io to requests
 
 // Routes
@@ -88,9 +105,15 @@ app.use('/api/referrals', referralRoutes);
 app.use('/api/tasks', taskRoutes);
 app.use('/api/symptom-checker', symptomCheckerRoutes);
 app.use('/api/users', userRoutes);
+app.use('/api/notifications', notificationRoutes);
+app.use('/api/emergency', emergencyRoutes);
+
+// Razorpay Webhook endpoint alias
+app.post('/api/payments/razorpay/webhook', handleRazorpayWebhook);
 
 // Simple health check
 app.get('/api/health', (req, res) => res.json({ status: 'ok' }));
+
 
 // Enhanced Socket.IO implementation
 io.on('connection', (socket) => {

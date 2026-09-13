@@ -7,6 +7,8 @@ import { Field, Input } from '../components/ui/Field'
 import Button from '../components/ui/Button'
 import { compressImage } from '../lib/compressImage'
 import { useTranslation } from 'react-i18next'
+import { loadRazorpayScript } from '../lib/razorpay'
+import { validateIndianMobile, normalizeIndianMobile } from '../lib/phoneValidation'
 
 export default function CheckoutPage() {
   const toast = useToast()
@@ -33,7 +35,11 @@ export default function CheckoutPage() {
     landmark: ''
   })
   const [notes, setNotes] = useState('')
+  const [paymentMethod, setPaymentMethod] = useState('cod') // 'cod' | 'online'
   const [submitting, setSubmitting] = useState(false)
+  const [submitStep, setSubmitStep] = useState('') // '' | 'initiating' | 'verifying'
+  const [paymentFailureInfo, setPaymentFailureInfo] = useState(null)
+  const [phoneTouched, setPhoneTouched] = useState(false)
   const [addressErrors, setAddressErrors] = useState({})
 
   useEffect(() => {
@@ -95,8 +101,12 @@ export default function CheckoutPage() {
     if (orderType !== 'delivery') return true
     const next = {}
     if (!deliveryAddress.name.trim()) next.name = 'Please enter the name for delivery.'
-    if (!deliveryAddress.phone.trim()) next.phone = 'Please enter a phone number.'
-    else if (!/^[0-9]{10}$/.test(deliveryAddress.phone.replace(/\D/g, '').slice(-10))) next.phone = 'Enter a 10-digit mobile number.'
+    
+    const phoneVal = validateIndianMobile(deliveryAddress.phone)
+    if (!phoneVal.isValid) {
+      next.phone = phoneVal.error || 'Please enter a valid 10-digit Indian mobile number.'
+    }
+
     if (!deliveryAddress.addressLine1.trim()) next.addressLine1 = 'Please enter the address.'
     if (!deliveryAddress.city.trim()) next.city = 'Please enter the city or village.'
     if (!deliveryAddress.state.trim()) next.state = 'Please enter the state.'
@@ -130,6 +140,7 @@ export default function CheckoutPage() {
   }
 
   const placeOrder = async () => {
+    if (submitting) return
     if (!validateForm()) return
 
     if (hasPrescriptionItems() && !prescriptionImage) {
@@ -137,9 +148,124 @@ export default function CheckoutPage() {
       toast.error(t('checkout.prescriptionMissing'))
       return
     }
-    
+
+    setPaymentFailureInfo(null)
+
+    // Prepare normalized address
+    const normalizedDeliveryAddress = orderType === 'delivery' ? {
+      ...deliveryAddress,
+      phone: normalizeIndianMobile(deliveryAddress.phone)
+    } : undefined
+
+    // ─── Flow 1: Online Payment (Razorpay Standard Checkout) ─────────
+    if (paymentMethod === 'online') {
+      try {
+        setSubmitting(true)
+        setSubmitStep('initiating')
+
+        // 1. Load Razorpay script dynamically
+        const scriptLoaded = await loadRazorpayScript()
+        if (!scriptLoaded || !window.Razorpay) {
+          throw new Error('Unable to connect to Razorpay payment gateway. Please check your internet connection or use Cash on Delivery.')
+        }
+
+        // 2. Request backend to create Razorpay order (backend validates amount from DB)
+        const { data: rzpData } = await api.post('/pharmacy/payment/create-order', {
+          pharmacyId,
+          orderType,
+          deliveryAddress: normalizedDeliveryAddress,
+          prescriptionImage: prescriptionImage || undefined
+        })
+
+        const { razorpayOrderId, amount, currency, keyId } = rzpData
+        if (!razorpayOrderId || !keyId) {
+          throw new Error('Invalid payment configuration received from server.')
+        }
+
+        // 3. Open Razorpay Checkout modal
+        const rzpOptions = {
+          key: keyId,
+          amount: amount,
+          currency: currency || 'INR',
+          name: 'GramSathi Pharmacy',
+          description: `Medicine Order • ${pharmacy?.name || 'GramSathi'}`,
+          order_id: razorpayOrderId,
+          prefill: {
+            name: deliveryAddress.name || user?.name || '',
+            contact: normalizeIndianMobile(deliveryAddress.phone)?.replace('+91', '') || user?.phone || '',
+            email: user?.email || ''
+          },
+          theme: {
+            color: '#0284c7'
+          },
+          modal: {
+            ondismiss: function () {
+              setSubmitting(false)
+              setSubmitStep('')
+              setPaymentFailureInfo({
+                type: 'cancelled',
+                message: t('checkout.paymentCancelledHelp', 'You closed the payment window. Your cart is safe and you can try again.')
+              })
+            }
+          },
+          handler: async function (paymentResponse) {
+            try {
+              setSubmitStep('verifying')
+
+              // 4. Send HMAC-SHA256 signature to backend for mandatory server verification
+              const { data: verifiedOrder } = await api.post('/pharmacy/payment/verify', {
+                razorpayOrderId: paymentResponse.razorpay_order_id,
+                razorpayPaymentId: paymentResponse.razorpay_payment_id,
+                razorpaySignature: paymentResponse.razorpay_signature,
+                pharmacyId,
+                orderType,
+                deliveryAddress: normalizedDeliveryAddress,
+                notes,
+                prescriptionImage: prescriptionImage || undefined
+              })
+
+              toast.success(t('checkout.paymentSuccess', 'Payment successful!'))
+              navigate(`/patient/medicine/orders/${verifiedOrder._id}`, {
+                state: { isNewOrder: true, paymentSuccess: true, order: verifiedOrder }
+              })
+            } catch (verifyError) {
+              console.error('Payment verification failed:', verifyError)
+              setSubmitting(false)
+              setSubmitStep('')
+              setPaymentFailureInfo({
+                type: 'verification_failed',
+                message: friendlyError(verifyError) || "We couldn't verify your payment yet. Please check your order status or try again after a moment."
+              })
+            }
+          }
+        }
+
+        const rzp = new window.Razorpay(rzpOptions)
+
+        rzp.on('payment.failed', function (resp) {
+          console.error('[Razorpay Checkout] Payment failed:', resp.error)
+          setSubmitting(false)
+          setSubmitStep('')
+          setPaymentFailureInfo({
+            type: 'failed',
+            message: resp.error?.description || t('checkout.paymentFailedHelp', 'Your payment could not be completed. Your cart has been preserved.')
+          })
+        })
+
+        rzp.open()
+      } catch (error) {
+        console.error('Razorpay initialization error:', error)
+        setSubmitting(false)
+        setSubmitStep('')
+        toast.error(friendlyError(error) || "We couldn't start the payment. Please try again.")
+      }
+      return
+    }
+
+    // ─── Flow 2: Cash on Delivery (COD) ──────────────────────────────
     try {
       setSubmitting(true)
+      setSubmitStep('submitting')
       
       const orderData = {
         pharmacyId,
@@ -148,26 +274,28 @@ export default function CheckoutPage() {
       }
       
       if (orderType === 'delivery') {
-        orderData.deliveryAddress = deliveryAddress
+        orderData.deliveryAddress = normalizedDeliveryAddress
       }
       if (prescriptionImage) orderData.prescriptionImage = prescriptionImage
       
       const { data } = await api.post('/pharmacy/orders', orderData)
       
-      // Redirect to order success page
-      navigate(`/patient/medicine/orders/${data._id}`)
+      // Redirect to order success page with new order indicator
+      navigate(`/patient/medicine/orders/${data._id}`, { state: { isNewOrder: true, order: data } })
       
     } catch (error) {
       console.error('Order failed:', error)
       toast.error(friendlyError(error))
     } finally {
       setSubmitting(false)
+      setSubmitStep('')
     }
   }
 
   const hasPrescriptionItems = () => {
     return cart?.items?.some(item => item.medicineId.prescriptionRequired) || false
   }
+
 
   if (loading) {
     return (
@@ -197,10 +325,55 @@ export default function CheckoutPage() {
 
   return (
     <PageLayout title={`${t('checkout.orderSummary', 'Checkout')} - ${pharmacy.name}`}>
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 pb-32 sm:pb-36">
         
         {/* Main Checkout Form */}
         <div className="lg:col-span-2 space-y-6">
+
+          {/* Payment Failure / Cancellation Banner */}
+          {paymentFailureInfo && (
+            <div className="card p-4 border-2 border-danger-200 bg-danger-50/70 dark:bg-danger-950/30 dark:border-danger-900 rounded-2xl shadow-sm animate-rise-in">
+              <div className="flex items-start gap-3">
+                <div className="w-10 h-10 rounded-full bg-danger-100 dark:bg-danger-900/50 text-danger-600 flex items-center justify-center shrink-0">
+                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                  </svg>
+                </div>
+                <div className="flex-1">
+                  <h4 className="font-semibold text-danger-900 dark:text-danger-200">
+                    {paymentFailureInfo.type === 'cancelled'
+                      ? t('checkout.paymentCancelled', 'Payment Cancelled')
+                      : t('checkout.paymentFailed', 'Payment Unsuccessful')}
+                  </h4>
+                  <p className="text-small text-danger-800 dark:text-danger-300 mt-1">
+                    {paymentFailureInfo.message}
+                  </p>
+                  <div className="flex flex-wrap gap-2 mt-3">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setPaymentFailureInfo(null)
+                        placeOrder()
+                      }}
+                      className="btn btn-sm btn-primary"
+                    >
+                      {t('checkout.tryAgain', 'Try Online Payment Again')}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setPaymentMethod('cod')
+                        setPaymentFailureInfo(null)
+                      }}
+                      className="btn btn-sm btn-secondary"
+                    >
+                      {t('checkout.chooseCod', 'Choose Cash on Delivery')}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
           
           {/* Order Type Selection */}
           <div className="card">
@@ -273,13 +446,57 @@ export default function CheckoutPage() {
                         onChange={e => { setDeliveryAddress({...deliveryAddress, name: e.target.value}); clearAddressError('name') }} />
                     )}
                   </Field>
-                  <Field label={t('checkout.phone', 'Phone number')} error={addressErrors.phone} required>
-                    {(props) => (
-                      <Input {...props} type="tel" inputMode="tel" autoComplete="tel" error={addressErrors.phone}
-                        placeholder={t('checkout.phonePlaceholder', '10-digit mobile number')}
-                        value={deliveryAddress.phone}
-                        onChange={e => { setDeliveryAddress({...deliveryAddress, phone: e.target.value}); clearAddressError('phone') }} />
-                    )}
+                  <Field label={t('checkout.phone', 'Mobile number')} error={addressErrors.phone} required>
+                    {(props) => {
+                      const phoneVal = validateIndianMobile(deliveryAddress.phone)
+                      const isPhoneValid = phoneTouched && phoneVal.isValid
+                      return (
+                        <div className="space-y-1">
+                          <div className="flex rounded-control shadow-sm">
+                            <span className="inline-flex items-center px-3 rounded-l-control border border-r-0 border-line bg-surface-2 text-muted text-small select-none font-medium">
+                              +91
+                            </span>
+                            <Input
+                              {...props}
+                              type="tel"
+                              inputMode="tel"
+                              autoComplete="tel"
+                              className="rounded-l-none"
+                              error={addressErrors.phone}
+                              placeholder={t('checkout.phonePlaceholder', '10-digit mobile number')}
+                              maxLength="14"
+                              value={deliveryAddress.phone.replace(/^\+91\s?/, '')}
+                              onBlur={() => {
+                                setPhoneTouched(true)
+                                if (deliveryAddress.phone) {
+                                  const check = validateIndianMobile(deliveryAddress.phone)
+                                  if (!check.isValid) {
+                                    setAddressErrors(prev => ({ ...prev, phone: check.error }))
+                                  } else {
+                                    clearAddressError('phone')
+                                  }
+                                }
+                              }}
+                              onChange={e => {
+                                const val = e.target.value.replace(/[^\d+]/g, '')
+                                setDeliveryAddress(prev => ({ ...prev, phone: val }))
+                                if (phoneTouched) {
+                                  const check = validateIndianMobile(val)
+                                  if (check.isValid) {
+                                    clearAddressError('phone')
+                                  }
+                                }
+                              }}
+                            />
+                          </div>
+                          {isPhoneValid && !addressErrors.phone && (
+                            <p className="text-caption text-success-600 font-medium flex items-center gap-1 mt-1">
+                              <span>✓</span> {t('checkout.validPhone', 'Valid Indian mobile number')}
+                            </p>
+                          )}
+                        </div>
+                      )
+                    }}
                   </Field>
                   <div className="md:col-span-2">
                     <Field label={t('checkout.addressLine1', 'Address line 1')} error={addressErrors.addressLine1} required>
@@ -341,10 +558,6 @@ export default function CheckoutPage() {
                 <h4 className="card-title mb-1">{t('checkout.prescriptionTitle')}</h4>
                 <p className="text-small text-body mb-4">{t('checkout.prescriptionHelp')}</p>
 
-                {/* The order used to be placed on a promise to show the
-                    prescription later, which meant Schedule H medicines could
-                    be bought with one tap. The pharmacy now receives the photo
-                    with the order, and the server refuses the order without it. */}
                 {prescriptionImage ? (
                   <div className="flex items-center gap-3">
                     <img
@@ -450,35 +663,101 @@ export default function CheckoutPage() {
             </div>
           </div>
 
-          {/* Payment Method */}
+          {/* Payment Method Selector */}
           <div className="card">
             <div className="card-body">
-              <h3 className="section-title mb-4">{t('checkout.paymentMethod')}</h3>
+              <h3 className="section-title mb-3">{t('checkout.paymentMethod')}</h3>
               <div className="space-y-3">
-                <label className="flex items-center space-x-3">
+                {/* Cash on Delivery */}
+                <label
+                  className={`flex items-start gap-3 p-3.5 rounded-xl border-2 transition cursor-pointer ${
+                    paymentMethod === 'cod'
+                      ? 'border-emerald-600 bg-emerald-50/40 dark:border-emerald-500 dark:bg-emerald-950/20'
+                      : 'border-line hover:border-line-hover bg-card'
+                  }`}
+                >
                   <input
                     type="radio"
-                    name="payment"
+                    name="paymentMethod"
                     value="cod"
-                    defaultChecked
-                    className="w-4 h-4 text-info-600"
+                    checked={paymentMethod === 'cod'}
+                    onChange={() => setPaymentMethod('cod')}
+                    className="mt-1 w-4 h-4 text-emerald-600 focus:ring-emerald-500"
                   />
-                  <div>
-                    <div className="font-medium">{t('checkout.cod')}</div>
-                    <div className="text-small text-muted">{t('checkout.codHelp')}</div>
+                  <div className="flex-1 min-w-0">
+                    <div className="font-semibold text-body flex items-center justify-between">
+                      <span>{t('checkout.cod', 'Cash on Delivery')}</span>
+                      <span className="text-[11px] px-2 py-0.5 rounded-full bg-line font-normal text-muted">Doorstep</span>
+                    </div>
+                    <p className="text-small text-muted mt-0.5">
+                      {t('checkout.codHelp', 'Pay when your medicine arrives')}
+                    </p>
+                  </div>
+                </label>
+
+                {/* Online Payment (Razorpay) */}
+                <label
+                  className={`flex items-start gap-3 p-3.5 rounded-xl border-2 transition cursor-pointer ${
+                    paymentMethod === 'online'
+                      ? 'border-primary-600 bg-primary-50/40 dark:border-primary-500 dark:bg-primary-950/20'
+                      : 'border-line hover:border-line-hover bg-card'
+                  }`}
+                >
+                  <input
+                    type="radio"
+                    name="paymentMethod"
+                    value="online"
+                    checked={paymentMethod === 'online'}
+                    onChange={() => setPaymentMethod('online')}
+                    className="mt-1 w-4 h-4 text-primary-600 focus:ring-primary-500"
+                  />
+                  <div className="flex-1 min-w-0">
+                    <div className="font-semibold text-body flex items-center justify-between">
+                      <span>{t('checkout.onlinePayment', 'Online Payment')}</span>
+                      <span className="text-[11px] px-2 py-0.5 rounded-full bg-primary-100 text-primary-700 font-medium dark:bg-primary-900/40 dark:text-primary-300">Fast & Secure</span>
+                    </div>
+                    <p className="text-small text-muted mt-0.5">
+                      {t('checkout.onlinePaymentHelp', 'UPI, Cards, Netbanking & Wallets')}
+                    </p>
+                    <div className="flex items-center gap-1.5 text-caption text-muted mt-2 font-medium">
+                      <svg className="w-3.5 h-3.5 text-success-600 shrink-0 inline" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                      </svg>
+                      <span>{t('checkout.poweredByRazorpay', 'Secure payment powered by Razorpay')}</span>
+                    </div>
                   </div>
                 </label>
               </div>
             </div>
           </div>
 
-          {/* Place Order Button */}
+          {/* Place Order / Pay Securely Button */}
           <button
             onClick={placeOrder}
             disabled={submitting}
-            className={`btn btn-primary w-full text-lg py-3 ${submitting ? 'opacity-50 cursor-not-allowed' : ''}`}
+            className={`btn btn-primary w-full text-lg py-3 flex items-center justify-center gap-2 ${submitting ? 'opacity-70 cursor-not-allowed' : ''}`}
           >
-            {submitting ? t('checkout.submitting') : `${t('checkout.placeOrder')} - ₹${getFinalTotal()}`}
+            {submitting ? (
+              <>
+                <span className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin inline-block" />
+                <span>
+                  {submitStep === 'initiating'
+                    ? t('checkout.initiatingPayment', 'Creating secure payment…')
+                    : submitStep === 'verifying'
+                    ? t('checkout.verifyingPayment', 'Verifying payment…')
+                    : t('checkout.submitting', 'Placing order…')}
+                </span>
+              </>
+            ) : paymentMethod === 'online' ? (
+              <>
+                <svg className="w-5 h-5 inline" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                </svg>
+                <span>{t('checkout.paySecurely', { amount: getFinalTotal() })}</span>
+              </>
+            ) : (
+              <span>{`${t('checkout.placeOrder')} — ₹${getFinalTotal()}`}</span>
+            )}
           </button>
 
           {/* Back to Shop */}
@@ -491,5 +770,6 @@ export default function CheckoutPage() {
         </div>
       </div>
     </PageLayout>
+
   )
 }

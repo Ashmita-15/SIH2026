@@ -417,7 +417,15 @@ export async function requestAssistedConsultation(patientId, input = {}, ctx) {
 export async function listAssistedConsultations(patientId, ctx) {
     const worker = await resolveWorker(ctx);
     await getPatient(patientId, ctx);
-    return Appointment.find({ patientId, assistedFacilityId: worker.hospitalId })
+    /**
+     * Assisted consultations only: ones this worker arranged, or ones arranged
+     * from their facility. Matching on assistedFacilityId alone meant a worker
+     * with no facility queried `assistedFacilityId: null` — which is every
+     * ordinary appointment the patient had booked for themselves.
+     */
+    const scope = [{ assistedBy: worker._id }];
+    if (worker.hospitalId) scope.push({ assistedFacilityId: worker.hospitalId });
+    return Appointment.find({ patientId, $or: scope })
         .populate('doctorId', 'name specialization')
         .populate('assistedBy', 'name workerType')
         .populate('encounterId', 'type occurredAt vitals dangerSigns')

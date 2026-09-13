@@ -6,6 +6,7 @@ import { LANGUAGES } from '../translations/i18n'
 import { homePathFor } from '../config/navigation'
 import Dropdown, { DropdownItem } from './ui/Dropdown'
 import Avatar from './ui/Avatar'
+import NotificationBell from './notifications/NotificationBell.jsx'
 import logo from '../assets/images/logo.png'
 
 /** One nav config, rendered at both breakpoints — the mobile menu used to
@@ -108,6 +109,8 @@ export default function Navbar() {
         <div className="hidden md:flex items-center gap-2">
           <LanguageMenu current={current} onChange={(c) => i18n.changeLanguage(c)} t={t} transparent={transparent} />
 
+          {isAuthenticated && <NotificationBell />}
+
           {!isAuthenticated ? (
             <Link
               to="/login"
@@ -161,10 +164,12 @@ export default function Navbar() {
           )}
         </div>
 
-        {/* Mobile trigger */}
-        <button
-          type="button"
-          className={`md:hidden w-11 h-11 -mr-2 flex items-center justify-center rounded-control transition-colors ${
+        {/* Mobile controls */}
+        <div className="md:hidden flex items-center gap-1">
+          {isAuthenticated && <NotificationBell />}
+          <button
+            type="button"
+            className={`w-11 h-11 -mr-2 flex items-center justify-center rounded-control transition-colors ${
             transparent ? 'text-white hover:bg-white/15' : 'text-body hover:bg-surface-2'
           }`}
           onClick={() => setMobileOpen(o => !o)}
@@ -175,7 +180,8 @@ export default function Navbar() {
           <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
             <path strokeLinecap="round" d={mobileOpen ? 'M6 18L18 6M6 6l12 12' : 'M4 7h16M4 12h16M4 17h16'} />
           </svg>
-        </button>
+          </button>
+        </div>
       </nav>
 
       {/* Mobile menu — always solid so it stays readable. */}

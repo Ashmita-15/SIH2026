@@ -2,6 +2,24 @@ import Hospital from '../models/Hospital.js';
 import User from '../models/User.js';
 import Pharmacy from '../models/Pharmacy.js';
 
+/**
+ * The facility this hospital account manages.
+ *
+ * Previously every lookup here was findOne({ ownerId }), while the referral
+ * inbox and facility dashboard read User.hospitalId. An account owning more
+ * than one Hospital record (a seeded profile plus one created later) could
+ * attach its doctors and health workers to one record while its inbox read the
+ * other. The linked record wins; ownerId alone is only the fallback for an
+ * account that was never linked.
+ */
+async function ownedHospitalFilter(userId) {
+    const user = await User.findById(userId).select('hospitalId').lean();
+    if (user?.hospitalId && await Hospital.exists({ _id: user.hospitalId, ownerId: userId })) {
+        return { _id: user.hospitalId, ownerId: userId };
+    }
+    return { ownerId: userId };
+}
+
 // Create hospital profile
 export const createHospitalProfile = async (req, res) => {
     try {
@@ -15,7 +33,7 @@ export const createHospitalProfile = async (req, res) => {
         }
         
         // Check if hospital already exists for this user
-        const existingHospital = await Hospital.findOne({ ownerId: userId });
+        const existingHospital = await Hospital.findOne(await ownedHospitalFilter(userId));
         if (existingHospital) {
             return res.status(400).json({ message: 'Hospital profile already exists' });
         }
@@ -51,7 +69,7 @@ export const getHospitalProfile = async (req, res) => {
     try {
         const userId = req.user.id;
         
-        const hospital = await Hospital.findOne({ ownerId: userId })
+        const hospital = await Hospital.findOne(await ownedHospitalFilter(userId))
             .populate('doctors', 'name email specialization qualification phone')
             .populate('pharmacies', 'name location address contact email');
         
@@ -71,7 +89,7 @@ export const updateHospitalProfile = async (req, res) => {
         const userId = req.user.id;
         const { name, email, phone, address, description, location, contactPerson, website, services, isActive } = req.body;
         
-        const hospital = await Hospital.findOne({ ownerId: userId });
+        const hospital = await Hospital.findOne(await ownedHospitalFilter(userId));
         if (!hospital) {
             return res.status(404).json({ message: 'Hospital profile not found' });
         }
@@ -105,7 +123,7 @@ export const addDoctorToHospital = async (req, res) => {
         const { doctorId } = req.body;
         
         // Find hospital
-        const hospital = await Hospital.findOne({ ownerId: userId });
+        const hospital = await Hospital.findOne(await ownedHospitalFilter(userId));
         if (!hospital) {
             return res.status(404).json({ message: 'Hospital profile not found' });
         }
@@ -141,7 +159,7 @@ export const removeDoctorFromHospital = async (req, res) => {
         const { doctorId } = req.body;
         
         // Find hospital
-        const hospital = await Hospital.findOne({ ownerId: userId });
+        const hospital = await Hospital.findOne(await ownedHospitalFilter(userId));
         if (!hospital) {
             return res.status(404).json({ message: 'Hospital profile not found' });
         }
@@ -171,7 +189,7 @@ export const addPharmacyToHospital = async (req, res) => {
         const { pharmacyId } = req.body;
         
         // Find hospital
-        const hospital = await Hospital.findOne({ ownerId: userId });
+        const hospital = await Hospital.findOne(await ownedHospitalFilter(userId));
         if (!hospital) {
             return res.status(404).json({ message: 'Hospital profile not found' });
         }
@@ -204,7 +222,7 @@ export const removePharmacyFromHospital = async (req, res) => {
         const { pharmacyId } = req.body;
         
         // Find hospital
-        const hospital = await Hospital.findOne({ ownerId: userId });
+        const hospital = await Hospital.findOne(await ownedHospitalFilter(userId));
         if (!hospital) {
             return res.status(404).json({ message: 'Hospital profile not found' });
         }
@@ -229,7 +247,7 @@ export const getDoctorsInHospital = async (req, res) => {
     try {
         const userId = req.user.id;
         
-        const hospital = await Hospital.findOne({ ownerId: userId }).populate('doctors', 'name email specialization qualification phone availability');
+        const hospital = await Hospital.findOne(await ownedHospitalFilter(userId)).populate('doctors', 'name email specialization qualification phone availability');
         if (!hospital) {
             return res.status(404).json({ message: 'Hospital profile not found' });
         }
@@ -245,7 +263,7 @@ export const getPharmaciesInHospital = async (req, res) => {
     try {
         const userId = req.user.id;
         
-        const hospital = await Hospital.findOne({ ownerId: userId }).populate('pharmacies', 'name location address contact email');
+        const hospital = await Hospital.findOne(await ownedHospitalFilter(userId)).populate('pharmacies', 'name location address contact email');
         if (!hospital) {
             return res.status(404).json({ message: 'Hospital profile not found' });
         }
@@ -266,7 +284,7 @@ export const getPharmaciesInHospital = async (req, res) => {
  */
 export const getHealthWorkersInHospital = async (req, res) => {
     try {
-        const hospital = await Hospital.findOne({ ownerId: req.user.id });
+        const hospital = await Hospital.findOne(await ownedHospitalFilter(req.user.id));
         if (!hospital) return res.status(404).json({ message: 'Hospital profile not found' });
 
         const [attached, unattached] = await Promise.all([
@@ -288,7 +306,7 @@ export const getHealthWorkersInHospital = async (req, res) => {
 export const addHealthWorkerToHospital = async (req, res) => {
     try {
         const { workerId } = req.body;
-        const hospital = await Hospital.findOne({ ownerId: req.user.id });
+        const hospital = await Hospital.findOne(await ownedHospitalFilter(req.user.id));
         if (!hospital) return res.status(404).json({ message: 'Hospital profile not found' });
 
         const worker = await User.findById(workerId).select('role hospitalId name');
@@ -312,7 +330,7 @@ export const addHealthWorkerToHospital = async (req, res) => {
 export const removeHealthWorkerFromHospital = async (req, res) => {
     try {
         const { workerId } = req.body;
-        const hospital = await Hospital.findOne({ ownerId: req.user.id });
+        const hospital = await Hospital.findOne(await ownedHospitalFilter(req.user.id));
         if (!hospital) return res.status(404).json({ message: 'Hospital profile not found' });
 
         const worker = await User.findById(workerId).select('role hospitalId');

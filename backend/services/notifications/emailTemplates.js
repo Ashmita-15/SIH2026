@@ -317,6 +317,55 @@ export function diagnosticCompletedEmail({ patientName, testName, resultSummary,
     };
 }
 
+// ─── Emergency alert ────────────────────────────────────────────────────────
+
+export function emergencyAlertEmail({ patientName, latitude, longitude, timestamp, dashboardUrl }) {
+    const mapsUrl = `https://www.google.com/maps?q=${latitude},${longitude}`;
+    const fmtTime = timestamp
+        ? new Date(timestamp).toLocaleString('en-IN', {
+            weekday: 'short', day: 'numeric', month: 'short', year: 'numeric',
+            hour: '2-digit', minute: '2-digit', second: '2-digit',
+            timeZone: process.env.CLINIC_TZ || 'Asia/Kolkata'
+        })
+        : 'Unknown';
+
+    return {
+        subject: `🚨 EMERGENCY ALERT – Patient ${patientName} needs help`,
+        html: `
+<div style="font-family: Arial, Helvetica, sans-serif; background:#f4f6f8; padding:24px 0; margin:0;">
+  <div style="max-width:520px; margin:0 auto; background:#ffffff; border-radius:8px; overflow:hidden; border:1px solid #e5e7eb;">
+    <div style="background:#A81E17; padding:18px 24px;">
+      <span style="color:#ffffff; font-size:18px; font-weight:bold; letter-spacing:0.3px;">🚨 EMERGENCY ALERT — GramSathi</span>
+    </div>
+    <div style="padding:24px;">
+      <h2 style="margin:0 0 16px 0; color:#A81E17; font-size:18px;">A patient near your facility needs emergency help</h2>
+      <div style="color:#374151; font-size:14px; line-height:1.6;">
+        ${infoRow('Patient name', patientName)}
+        ${infoRow('Alert sent at', fmtTime)}
+        ${infoRow('Coordinates', `${latitude}, ${longitude}`)}
+        <p style="margin:16px 0 8px 0;">
+          <a href="${mapsUrl}" style="display:inline-block; padding:10px 20px; background:#A81E17; color:#ffffff; text-decoration:none; border-radius:6px; font-weight:bold;">
+            📍 Open Patient Location in Google Maps
+          </a>
+        </p>
+        ${dashboardUrl ? `<p style="margin:8px 0;">
+          <a href="${dashboardUrl}" style="color:#A81E17; font-weight:bold;">Acknowledge this alert in GramSathi →</a>
+        </p>` : ''}
+        <p style="margin-top:16px; padding:12px; background:#fef3f2; border-radius:6px; color:#A81E17; font-weight:500;">
+          This patient triggered an emergency alert from the GramSathi app. Please respond immediately if possible.
+        </p>
+      </div>
+    </div>
+    <div style="padding:16px 24px; background:#f9fafb; border-top:1px solid #e5e7eb;">
+      <p style="margin:0; color:#9ca3af; font-size:12px;">
+        This is an automated emergency alert from GramSathi. Please do not reply to this email.
+      </p>
+    </div>
+  </div>
+</div>`.trim()
+    };
+}
+
 export default {
     diagnosticCompletedEmail,
     queueFinalizedEmail,
@@ -331,5 +380,6 @@ export default {
     healthRecordUploadedEmail,
     referralCreatedFacilityEmail,
     referralCreatedPatientEmail,
-    referralStatusChangedEmail
+    referralStatusChangedEmail,
+    emergencyAlertEmail
 };

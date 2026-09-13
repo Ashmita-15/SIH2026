@@ -20,8 +20,10 @@ import CheckoutPage from './CheckoutPage'
 import OrderSuccess from './OrderSuccess'
 import Button from '../components/ui/Button'
 import { Loading } from '../components/ui/States'
+import NotificationsPage from './NotificationsPage'
 
 const VideoCall = lazy(() => import('../components/VideoCall'))
+const NearbyPage = lazy(() => import('../components/patient/NearbyPage'))
 
 export default function PatientDashboard() {
   return (
@@ -47,12 +49,18 @@ export default function PatientDashboard() {
       <Route path="medicine/:pharmacyId" element={<PharmacyShop />} />
       <Route path="medicine/:pharmacyId/checkout" element={<CheckoutPage />} />
 
+      <Route path="nearby" element={<NearbyRoute />} />
+
       <Route path="profile" element={<ProfileRoute />} />
 
       {/* Section paths from the previous tab structure. */}
       <Route path="appointments" element={<Navigate to="/patient/care" replace />} />
       <Route path="symptoms" element={<Navigate to="/patient/care/symptoms" replace />} />
       <Route path="orders" element={<Navigate to="/patient/medicine/orders" replace />} />
+
+      {/* Notification Center full page */}
+      <Route path="notifications" element={<NotificationsPage />} />
+
       <Route path="*" element={<Navigate to="/patient" replace />} />
     </Routes>
   )
@@ -177,6 +185,17 @@ function DiagnosticsRoute() {
   return (
     <Page title={t('diagnostics.title')} description={t('diagnostics.subtitle')}>
       <MyDiagnostics />
+    </Page>
+  )
+}
+
+function NearbyRoute() {
+  const { t } = useTranslation()
+  return (
+    <Page title={t('nearby.title')} description={t('nearby.subtitle')}>
+      <Suspense fallback={<Loading className="py-24" />}>
+        <NearbyPage />
+      </Suspense>
     </Page>
   )
 }

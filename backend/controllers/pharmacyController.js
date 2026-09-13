@@ -1,9 +1,23 @@
+import mongoose from 'mongoose';
 import Pharmacy from '../models/Pharmacy.js';
 import MedicineStock from '../models/MedicineStock.js';
 import { findAvailability } from '../services/availabilityService.js';
 import { sendError } from '../services/errors.js';
 import Cart from '../models/Cart.js';
 import Order from '../models/Order.js';
+import { 
+    notifyPharmacyNewOrder, 
+    notifyPharmacyPaymentFailed, 
+    notifyPharmacyOrderStatus 
+} from '../services/notifications/notificationService.js';
+import { validateIndianMobile, normalizeIndianMobile } from '../utils/phoneValidation.js';
+import { 
+    createRazorpayOrder as createRzpOrder, 
+    verifyPaymentSignature, 
+    verifyWebhookSignature, 
+    getPublicRazorpayKey 
+} from '../services/paymentService.js';
+
 
 // Pharmacy Management
 /**
@@ -443,11 +457,23 @@ export const createOrder = async (req, res) => {
     try {
         const { pharmacyId, orderType, deliveryAddress, notes, prescriptionImage } = req.body;
         
+        // Validate delivery address and phone if order is for delivery
+        if (orderType === 'delivery') {
+            if (!deliveryAddress || !deliveryAddress.phone) {
+                return res.status(400).json({ message: 'A valid Indian mobile number is required for delivery.' });
+            }
+            const phoneValidation = validateIndianMobile(deliveryAddress.phone);
+            if (!phoneValidation.isValid) {
+                return res.status(400).json({ message: phoneValidation.error || 'Please enter a valid 10-digit Indian mobile number.' });
+            }
+            deliveryAddress.phone = phoneValidation.normalized;
+        }
+
         // Get cart
         const cart = await Cart.findOne({ userId: req.user.id, pharmacyId })
             .populate('items.medicineId');
         
-        if (!cart || cart.items.length === 0) {
+        if (!cart || !Array.isArray(cart.items) || cart.items.length === 0) {
             return res.status(400).json({ message: 'Cart is empty' });
         }
         
@@ -458,6 +484,14 @@ export const createOrder = async (req, res) => {
         
         for (const cartItem of cart.items) {
             const medicine = cartItem.medicineId;
+            if (!medicine) {
+                return res.status(400).json({ 
+                    message: 'One or more medicines in your cart are no longer available. Please review your cart.' 
+                });
+            }
+            if (!cartItem.quantity || cartItem.quantity < 1) {
+                return res.status(400).json({ message: 'Invalid quantity in cart' });
+            }
             
             if (medicine.quantity < cartItem.quantity) {
                 return res.status(400).json({ 
@@ -488,15 +522,6 @@ export const createOrder = async (req, res) => {
             totalAmount += deliveryFee;
         }
         
-        /**
-         * Prescription-only medicines need a prescription.
-         *
-         * The order carried a prescriptionRequired flag and an empty
-         * prescriptionImage field that nothing ever filled, so antibiotics
-         * and other Schedule H drugs could be ordered with one tap and no
-         * prescription at all. The flag told the pharmacy to worry; it did
-         * not stop the order.
-         */
         if (prescriptionRequired && !prescriptionImage) {
             return res.status(400).json({
                 message: 'A photo of your prescription is needed for one or more of these medicines.',
@@ -518,8 +543,6 @@ export const createOrder = async (req, res) => {
             );
 
             if (!taken) {
-                // Someone got there first. Put back whatever we already took,
-                // so a failed checkout never quietly consumes stock.
                 for (const done of reserved) {
                     await MedicineStock.findByIdAndUpdate(done.id, { $inc: { quantity: done.quantity } });
                 }
@@ -531,7 +554,7 @@ export const createOrder = async (req, res) => {
             reserved.push({ id: cartItem.medicineId._id, quantity: cartItem.quantity, remaining: taken.quantity });
         }
 
-        // Create order
+        // Create COD order
         const order = new Order({
             userId: req.user.id,
             pharmacyId,
@@ -542,7 +565,10 @@ export const createOrder = async (req, res) => {
             deliveryFee,
             prescriptionRequired,
             prescriptionImage: prescriptionImage || '',
-            notes
+            notes,
+            paymentMethod: 'cod',
+            paymentStatus: 'pending',
+            status: 'pending'
         });
 
         try {
@@ -556,7 +582,6 @@ export const createOrder = async (req, res) => {
         }
 
         for (const cartItem of cart.items) {
-            
             // Emit real-time stock update
             req.io.emit('stock-updated', { 
                 pharmacyId, 
@@ -572,17 +597,406 @@ export const createOrder = async (req, res) => {
         // Populate order for response
         await order.populate([
             { path: 'userId', select: 'name email phone' },
-            { path: 'pharmacyId', select: 'name location contact' }
+            { path: 'pharmacyId', select: 'name location contact ownerId' }
         ]);
         
         // Emit new order to pharmacy
         req.io.to(`pharmacy_${pharmacyId}`).emit('new-order', order);
+        notifyPharmacyNewOrder({ order, pharmacyOwnerId: order.pharmacyId?.ownerId }).catch(() => {});
         
         res.status(201).json(order);
     } catch (e) {
         res.status(500).json({ message: e.message });
     }
 };
+
+/**
+ * Create a Razorpay Order for Online Payment.
+ *
+ * Security & Integrity:
+ * 1. Never trust amounts sent by the client. Subtotal and delivery fee are
+ *    calculated strictly from active database records.
+ * 2. Amount is converted to integer paise (e.g. ₹74.50 -> 7450 paise).
+ * 3. Validates phone number if order is for delivery.
+ * 4. Checks stock and prescription requirement.
+ */
+export const createRazorpayOrder = async (req, res) => {
+    try {
+        const { pharmacyId, orderType, deliveryAddress, prescriptionImage } = req.body;
+
+        if (!pharmacyId) {
+            return res.status(400).json({ message: 'Pharmacy ID is required' });
+        }
+
+        // Validate phone if delivery
+        if (orderType === 'delivery') {
+            if (!deliveryAddress || !deliveryAddress.phone) {
+                return res.status(400).json({ message: 'A valid Indian mobile number is required for delivery.' });
+            }
+            const phoneValidation = validateIndianMobile(deliveryAddress.phone);
+            if (!phoneValidation.isValid) {
+                return res.status(400).json({ message: phoneValidation.error || 'Please enter a valid 10-digit Indian mobile number.' });
+            }
+        }
+
+        // Get and validate cart
+        const cart = await Cart.findOne({ userId: req.user.id, pharmacyId })
+            .populate('items.medicineId');
+
+        if (!cart || !Array.isArray(cart.items) || cart.items.length === 0) {
+            return res.status(400).json({ message: 'Your cart is empty.' });
+        }
+
+        let totalAmount = 0;
+        let prescriptionRequired = false;
+
+        for (const cartItem of cart.items) {
+            const medicine = cartItem.medicineId;
+            if (!medicine) {
+                return res.status(400).json({
+                    message: 'One or more medicines in your cart are no longer available. Please review your cart.'
+                });
+            }
+            if (!cartItem.quantity || cartItem.quantity < 1) {
+                return res.status(400).json({ message: 'Invalid quantity in cart.' });
+            }
+            if (medicine.quantity < cartItem.quantity) {
+                return res.status(400).json({
+                    message: `Insufficient stock for ${medicine.medicineName}. Only ${medicine.quantity} available.`
+                });
+            }
+
+            const itemTotal = cartItem.finalPrice * cartItem.quantity;
+            totalAmount += itemTotal;
+            if (medicine.prescriptionRequired) {
+                prescriptionRequired = true;
+            }
+        }
+
+        if (prescriptionRequired && !prescriptionImage) {
+            return res.status(400).json({
+                message: 'A photo of your prescription is needed for one or more of these medicines.',
+                code: 'prescription_required'
+            });
+        }
+
+        let deliveryFee = 0;
+        if (orderType === 'delivery') {
+            deliveryFee = totalAmount < 500 ? 50 : 0;
+            totalAmount += deliveryFee;
+        }
+
+        // Convert to integer paise (strictly avoiding floating point imprecision)
+        const amountInPaise = Math.round(totalAmount * 100);
+
+        if (amountInPaise <= 0) {
+            return res.status(400).json({ message: 'Invalid order total.' });
+        }
+
+        // Generate receipt identifier (max 40 chars)
+        const receipt = `rcpt_${Date.now().toString(36)}_${req.user.id.slice(-6)}`;
+
+        const rzpOrder = await createRzpOrder({
+            amountInPaise,
+            receipt,
+            notes: {
+                userId: req.user.id,
+                pharmacyId: String(pharmacyId),
+                orderType: orderType || 'delivery'
+            }
+        });
+
+        res.json({
+            success: true,
+            razorpayOrderId: rzpOrder.id,
+            amount: rzpOrder.amount, // in paise
+            currency: rzpOrder.currency || 'INR',
+            keyId: getPublicRazorpayKey(),
+            totalAmount // formatted in rupees for display
+        });
+    } catch (err) {
+        console.error('[createRazorpayOrder] Error:', err);
+        res.status(500).json({ message: err.message || 'Failed to initiate Razorpay payment.' });
+    }
+};
+
+/**
+ * Verify Razorpay payment signature and create confirmed pharmacy order.
+ *
+ * Security & Integrity:
+ * 1. Mandatory server-side HMAC-SHA256 signature verification.
+ * 2. Idempotency: If an order with this razorpayOrderId already exists, return it safely.
+ * 3. Atomically reserves inventory with rollback.
+ * 4. Clears cart upon confirmed payment.
+ * 5. Notifies pharmacy and patient via unified notification system.
+ */
+export const verifyRazorpayPayment = async (req, res) => {
+    try {
+        const {
+            razorpayOrderId,
+            razorpayPaymentId,
+            razorpaySignature,
+            pharmacyId,
+            orderType,
+            deliveryAddress,
+            notes,
+            prescriptionImage
+        } = req.body;
+
+        if (!razorpayOrderId || !razorpayPaymentId || !razorpaySignature) {
+            return res.status(400).json({
+                message: 'Payment verification parameters missing (order ID, payment ID, or signature).'
+            });
+        }
+
+        // 1. Mandatory HMAC SHA256 Signature Verification
+        const isValidSignature = verifyPaymentSignature({
+            razorpayOrderId,
+            razorpayPaymentId,
+            razorpaySignature
+        });
+
+        if (!isValidSignature) {
+            console.warn('[verifyRazorpayPayment] Tampered or invalid signature attempt:', {
+                razorpayOrderId,
+                razorpayPaymentId
+            });
+            return res.status(400).json({
+                message: 'Payment verification failed: invalid signature. Your order has not been placed.'
+            });
+        }
+
+        // 2. Idempotency Check: check if order already created for this Razorpay order
+        let existingOrder = await Order.findOne({ razorpayOrderId });
+        if (existingOrder) {
+            await existingOrder.populate([
+                { path: 'userId', select: 'name email phone' },
+                { path: 'pharmacyId', select: 'name location contact ownerId' }
+            ]);
+            return res.status(200).json(existingOrder);
+        }
+
+        // 3. Validate Delivery Address & Mobile
+        if (orderType === 'delivery') {
+            if (!deliveryAddress || !deliveryAddress.phone) {
+                return res.status(400).json({ message: 'A valid Indian mobile number is required for delivery.' });
+            }
+            const phoneValidation = validateIndianMobile(deliveryAddress.phone);
+            if (!phoneValidation.isValid) {
+                return res.status(400).json({ message: phoneValidation.error || 'Please enter a valid 10-digit Indian mobile number.' });
+            }
+            deliveryAddress.phone = phoneValidation.normalized;
+        }
+
+        // 4. Retrieve cart and items
+        const cart = await Cart.findOne({ userId: req.user.id, pharmacyId })
+            .populate('items.medicineId');
+
+        if (!cart || !Array.isArray(cart.items) || cart.items.length === 0) {
+            return res.status(400).json({ message: 'Cart not found or empty.' });
+        }
+
+        const orderItems = [];
+        let totalAmount = 0;
+        let prescriptionRequired = false;
+
+        for (const cartItem of cart.items) {
+            const medicine = cartItem.medicineId;
+            if (!medicine) {
+                return res.status(400).json({
+                    message: 'One or more medicines in your cart are no longer available.'
+                });
+            }
+            if (!cartItem.quantity || cartItem.quantity < 1) {
+                return res.status(400).json({ message: 'Invalid quantity in cart.' });
+            }
+            if (medicine.quantity < cartItem.quantity) {
+                return res.status(400).json({
+                    message: `Insufficient stock for ${medicine.medicineName}.`
+                });
+            }
+
+            const itemTotal = cartItem.finalPrice * cartItem.quantity;
+            orderItems.push({
+                medicineId: medicine._id,
+                medicineName: medicine.medicineName,
+                quantity: cartItem.quantity,
+                price: cartItem.price,
+                finalPrice: cartItem.finalPrice,
+                total: itemTotal
+            });
+
+            totalAmount += itemTotal;
+            if (medicine.prescriptionRequired) {
+                prescriptionRequired = true;
+            }
+        }
+
+        let deliveryFee = 0;
+        if (orderType === 'delivery') {
+            deliveryFee = totalAmount < 500 ? 50 : 0;
+            totalAmount += deliveryFee;
+        }
+
+        // 5. Reserve stock atomically with rollback
+        const reserved = [];
+        for (const cartItem of cart.items) {
+            const taken = await MedicineStock.findOneAndUpdate(
+                { _id: cartItem.medicineId._id, quantity: { $gte: cartItem.quantity } },
+                { $inc: { quantity: -cartItem.quantity }, lastUpdated: new Date() },
+                { new: true }
+            );
+
+            if (!taken) {
+                for (const done of reserved) {
+                    await MedicineStock.findByIdAndUpdate(done.id, { $inc: { quantity: done.quantity } });
+                }
+                return res.status(409).json({
+                    message: `${cartItem.medicineId.medicineName} was just sold out. Please contact support.`,
+                    code: 'out_of_stock'
+                });
+            }
+            reserved.push({ id: cartItem.medicineId._id, quantity: cartItem.quantity, remaining: taken.quantity });
+        }
+
+        // 6. Create confirmed Order
+        const order = new Order({
+            userId: req.user.id,
+            pharmacyId,
+            items: orderItems,
+            orderType,
+            deliveryAddress: orderType === 'delivery' ? deliveryAddress : undefined,
+            totalAmount,
+            deliveryFee,
+            prescriptionRequired,
+            prescriptionImage: prescriptionImage || '',
+            notes,
+            paymentMethod: 'online',
+            paymentStatus: 'paid',
+            status: 'confirmed',
+            razorpayOrderId,
+            razorpayPaymentId,
+            razorpaySignature,
+            paymentVerifiedAt: new Date()
+        });
+
+        try {
+            await order.save();
+        } catch (err) {
+            // Roll back reserved stock if order save fails
+            for (const done of reserved) {
+                await MedicineStock.findByIdAndUpdate(done.id, { $inc: { quantity: done.quantity } });
+            }
+            throw err;
+        }
+
+        // 7. Emit real-time stock updates
+        for (const cartItem of cart.items) {
+            req.io.emit('stock-updated', {
+                pharmacyId,
+                medicineId: cartItem.medicineId._id,
+                newQuantity: reserved.find(r => String(r.id) === String(cartItem.medicineId._id))?.remaining
+            });
+        }
+
+        // 8. Clear cart
+        cart.items = [];
+        await cart.save();
+
+        // 9. Populate order details
+        await order.populate([
+            { path: 'userId', select: 'name email phone' },
+            { path: 'pharmacyId', select: 'name location contact ownerId' }
+        ]);
+
+        // 10. Emit socket event and notify
+        req.io.to(`pharmacy_${pharmacyId}`).emit('new-order', order);
+        notifyPharmacyNewOrder({ order, pharmacyOwnerId: order.pharmacyId?.ownerId }).catch(() => {});
+
+        res.status(201).json(order);
+    } catch (err) {
+        console.error('[verifyRazorpayPayment] Error:', err);
+        res.status(500).json({ message: err.message || 'Payment verification failed.' });
+    }
+};
+
+/**
+ * Razorpay Webhook Handler
+ *
+ * Security & Integrity:
+ * 1. Validates signature on raw request body (req.rawBody).
+ * 2. Idempotent processing of payment.captured / order.paid / payment.failed.
+ * 3. Never throws unhandled errors to avoid infinite webhook retry storms.
+ */
+export const handleRazorpayWebhook = async (req, res) => {
+    try {
+        const webhookSignature = req.headers['x-razorpay-signature'];
+        if (!webhookSignature || !req.rawBody) {
+            console.warn('[Razorpay Webhook] Missing signature or rawBody buffer');
+            return res.status(400).json({ message: 'Missing signature or payload buffer' });
+        }
+
+        const isValid = verifyWebhookSignature(req.rawBody, webhookSignature);
+        if (!isValid) {
+            console.warn('[Razorpay Webhook] Invalid webhook signature received');
+            return res.status(400).json({ message: 'Invalid webhook signature' });
+        }
+
+        const { event, payload } = req.body;
+        console.log(`[Razorpay Webhook] Processing event: ${event}`);
+
+        if (event === 'payment.captured' || event === 'order.paid') {
+            const paymentEntity = payload?.payment?.entity;
+            const rzpOrderId = paymentEntity?.order_id || payload?.order?.entity?.id;
+            const rzpPaymentId = paymentEntity?.id;
+
+            if (rzpOrderId) {
+                const order = await Order.findOne({ razorpayOrderId: rzpOrderId });
+                if (order) {
+                    let changed = false;
+                    if (order.paymentStatus !== 'paid') {
+                        order.paymentStatus = 'paid';
+                        if (order.status === 'pending') {
+                            order.status = 'confirmed';
+                        }
+                        order.paymentVerifiedAt = order.paymentVerifiedAt || new Date();
+                        changed = true;
+                    }
+                    if (rzpPaymentId && !order.razorpayPaymentId) {
+                        order.razorpayPaymentId = rzpPaymentId;
+                        changed = true;
+                    }
+                    if (changed) {
+                        await order.save();
+                        console.log(`[Razorpay Webhook] Order ${order.orderId} updated to paid/confirmed.`);
+                    }
+                }
+            }
+        } else if (event === 'payment.failed') {
+            const paymentEntity = payload?.payment?.entity;
+            const rzpOrderId = paymentEntity?.order_id;
+            if (rzpOrderId) {
+                const order = await Order.findOne({ razorpayOrderId: rzpOrderId });
+                if (order && order.paymentStatus !== 'paid') {
+                    order.paymentStatus = 'failed';
+                    await order.save();
+                    notifyPharmacyPaymentFailed({
+                        userId: order.userId,
+                        orderId: order._id,
+                        humanOrderId: order.orderId
+                    }).catch(() => {});
+                    console.log(`[Razorpay Webhook] Order ${order.orderId} marked as payment failed.`);
+                }
+            }
+        }
+
+        return res.status(200).json({ status: 'ok' });
+    } catch (err) {
+        console.error('[Razorpay Webhook] Error:', err);
+        return res.status(500).json({ message: 'Webhook processing error' });
+    }
+};
+
 
 export const getOrders = async (req, res) => {
     try {
@@ -673,6 +1087,9 @@ export const updateOrderStatus = async (req, res) => {
             note
         });
         
+        // Push notification to patient
+        notifyPharmacyOrderStatus({ order, status, note }).catch(() => {});
+        
         res.json(order);
     } catch (e) {
         res.status(500).json({ message: e.message });
@@ -682,20 +1099,27 @@ export const updateOrderStatus = async (req, res) => {
 export const getOrderById = async (req, res) => {
     try {
         const { orderId } = req.params;
-        
-        const order = await Order.findById(orderId)
+        if (!orderId) return res.status(400).json({ message: 'Order ID is required' });
+
+        const query = mongoose.Types.ObjectId.isValid(orderId)
+            ? { _id: orderId }
+            : { orderId: String(orderId).toUpperCase() };
+
+        const order = await Order.findOne(query)
             .populate('userId', 'name email phone')
-            // ownerId was missing from this projection, so the access check
-            // below dereferenced undefined and threw — meaning a pharmacy
-            // could never open one of its own orders, only ever a 500.
             .populate('pharmacyId', 'name location contact address ownerId');
 
         if (!order) return res.status(404).json({ message: 'Order not found' });
 
-        const isPatient = String(order.userId?._id) === String(req.user.id);
-        const isPharmacy = String(order.pharmacyId?.ownerId) === String(req.user.id);
+        const orderUserId = String(order.userId?._id || order.userId);
+        const pharmacyOwnerId = String(order.pharmacyId?.ownerId?._id || order.pharmacyId?.ownerId);
+        const currentUserId = String(req.user?.id || req.user?._id || '');
 
-        if (!isPatient && !isPharmacy) {
+        const isPatient = orderUserId === currentUserId;
+        const isPharmacy = pharmacyOwnerId === currentUserId;
+        const isAdmin = req.user?.role === 'admin';
+
+        if (!isPatient && !isPharmacy && !isAdmin) {
             return res.status(403).json({ message: 'Access denied' });
         }
         

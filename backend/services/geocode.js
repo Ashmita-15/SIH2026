@@ -31,6 +31,43 @@ export const isValidLatLon = (lat, lon) =>
     lat >= -90 && lat <= 90 && lon >= -180 && lon <= 180;
 
 /**
+ * Place name or address to coordinates.
+ *
+ * Serves two callers with one contract: the "search for a place" box on the
+ * nearby map, and the manual address fallback on facility sign-up. It returns
+ * a ranked list rather than a single hit because the map box lets a user pick
+ * between candidates; sign-up simply takes the first, which is the same result
+ * a single-hit lookup would have produced.
+ *
+ * @returns {Promise<Array<{lat: number, lon: number, label: string}>|null>}
+ *   [] when nothing matched, null when the lookup itself failed.
+ */
+export async function forwardGeocode(query) {
+    const q = String(query || '').trim();
+    if (q.length < 3 || q.length > 200) return [];
+
+    const url = `${NOMINATIM_SEARCH}?format=jsonv2&limit=5&q=${encodeURIComponent(q)}`;
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
+    try {
+        const res = await fetch(url, {
+            headers: { 'User-Agent': userAgent(), 'Accept-Language': 'en' },
+            signal: controller.signal
+        });
+        if (!res.ok) return null;
+        const body = await res.json();
+        if (!Array.isArray(body)) return null;
+        return body
+            .map(r => ({ lat: Number(r.lat), lon: Number(r.lon), label: String(r.display_name || '').slice(0, 300) }))
+            .filter(r => isValidLatLon(r.lat, r.lon));
+    } catch {
+        return null;
+    } finally {
+        clearTimeout(timer);
+    }
+}
+
+/**
  * @returns {Promise<{address: string, raw: object}|null>} null on any failure.
  */
 export async function reverseGeocode(lat, lon) {
@@ -51,52 +88,6 @@ export async function reverseGeocode(lat, lon) {
         const address = String(body?.display_name || '').trim();
         if (!address) return null;
         return { address, raw: body?.address || {} };
-    } catch {
-        return null;
-    } finally {
-        clearTimeout(timer);
-    }
-}
-
-/**
- * The other direction: a typed address to coordinates.
- *
- * The fallback for every device that cannot produce a fix — a desktop with no
- * GPS radio, a browser with location switched off, an indoor room where the
- * lookup times out. Without this, a real clinic that cannot satisfy the
- * browser simply cannot register, which is a worse failure than an
- * approximate position.
- *
- * Returns the coordinates Nominatim resolved *and* its canonical name for the
- * place, so the person confirms the address the map service actually matched
- * rather than the words they typed. Null when nothing matches: a typo must
- * become "we could not find that", never a pin in the wrong district.
- */
-export async function forwardGeocode(query) {
-    const q = String(query || '').trim();
-    if (q.length < 4) return null;
-
-    const url = `${NOMINATIM_SEARCH}?format=jsonv2&limit=1&addressdetails=1&q=${encodeURIComponent(q)}`;
-
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
-    try {
-        const res = await fetch(url, {
-            headers: { 'User-Agent': userAgent(), 'Accept-Language': 'en' },
-            signal: controller.signal
-        });
-        if (!res.ok) return null;
-        const list = await res.json();
-        const hit = Array.isArray(list) ? list[0] : null;
-        if (!hit) return null;
-
-        const lat = Number(hit.lat);
-        const lon = Number(hit.lon);
-        const address = String(hit.display_name || '').trim();
-        // A result without usable numbers is not a result.
-        if (!isValidLatLon(lat, lon) || !address) return null;
-
-        return { latitude: lat, longitude: lon, address };
     } catch {
         return null;
     } finally {

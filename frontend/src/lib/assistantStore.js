@@ -7,28 +7,12 @@
  * blobs, which would blow the 5MB string quota within a few turns.
  */
 
-const DB_NAME = 'gramsathi'
-const STORE = 'assistant-threads'
-const VERSION = 1
+import { getDB, STORES, isIndexedDBAvailable } from './offline/db.js'
 
-let dbPromise = null
-
-function open() {
-  if (dbPromise) return dbPromise
-  dbPromise = new Promise((resolve, reject) => {
-    const req = indexedDB.open(DB_NAME, VERSION)
-    req.onupgradeneeded = () => {
-      const db = req.result
-      if (!db.objectStoreNames.contains(STORE)) db.createObjectStore(STORE, { keyPath: 'userId' })
-    }
-    req.onsuccess = () => resolve(req.result)
-    req.onerror = () => reject(req.error)
-  })
-  return dbPromise
-}
+const STORE = STORES.ASSISTANT
 
 function tx(mode, run) {
-  return open().then(db => new Promise((resolve, reject) => {
+  return getDB().then(db => new Promise((resolve, reject) => {
     const t = db.transaction(STORE, mode)
     const req = run(t.objectStore(STORE))
     req.onsuccess = () => resolve(req.result)

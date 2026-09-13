@@ -21,6 +21,7 @@ export default function AppPreview() {
           loop
           muted
           playsInline
+          preload="metadata"
           className="w-full h-auto block rounded-[1.3rem] object-cover scale-[1.15] origin-top"
         />
       </div>

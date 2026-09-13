@@ -7,6 +7,7 @@ import { io } from 'socket.io-client'
 import Badge from '../components/ui/Badge'
 import { orderStatus } from '../lib/status'
 import { useTranslation } from 'react-i18next'
+import NotificationsPage from './NotificationsPage.jsx'
 
 const SOCKET_URL = import.meta.env.VITE_SIGNAL_URL || 'http://localhost:5000'
 
@@ -17,6 +18,10 @@ export default function PharmacyDashboard() {
   const navigate = useNavigate()
   const location = useLocation()
   const segment = location.pathname.replace(/^\/pharmacy\/?/, '').split('/')[0]
+
+  if (segment === 'notifications') {
+    return <NotificationsPage />
+  }
   const activeTab = ['medicines', 'orders', 'profile'].includes(segment) ? segment : 'overview'
   const setActiveTab = (tab) => navigate(tab === 'overview' ? '/pharmacy' : `/pharmacy/${tab}`)
   const [pharmacy, setPharmacy] = useState(null)
@@ -66,7 +71,11 @@ export default function PharmacyDashboard() {
 
   useEffect(() => {
     console.log('PharmacyDashboard mounted, user:', user)
-    const socket = io(SOCKET_URL)
+    const socket = io(SOCKET_URL, {
+      reconnectionAttempts: 5,
+      reconnectionDelay: 2500,
+      timeout: 10000
+    })
     
     // Join pharmacy room for real-time updates
     socket.emit('join-pharmacy-room', user.id)

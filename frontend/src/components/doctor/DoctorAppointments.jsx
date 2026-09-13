@@ -214,6 +214,7 @@ export default function DoctorAppointments({ mode = 'all', onJoinRoom }) {
                 )}
                 {appointment.status === 'confirmed' && (
                   <div className="flex items-center gap-2">
+                    {/* An in-person visit has no call to start. */}
                     {onJoinRoom && isRemote(appointment) && (
                       <Button size="sm" onClick={() => onJoinRoom(appointment._id)}>
                         {t('appointments.startConsultation')}

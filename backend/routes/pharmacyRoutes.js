@@ -28,7 +28,12 @@ import {
     getOrders,
     getPharmacyOrders,
     updateOrderStatus,
-    getOrderById
+    getOrderById,
+    
+    // Razorpay Payment Management
+    createRazorpayOrder,
+    verifyRazorpayPayment,
+    handleRazorpayWebhook
 } from '../controllers/pharmacyController.js';
 
 const router = Router();
@@ -36,6 +41,12 @@ const router = Router();
 // Specific routes (must come before generic parameterized routes)
 router.get('/all', getAllPharmacies);
 router.get('/search/stock/:medicineName', checkStock);
+
+// Razorpay Payment endpoints
+router.post('/payment/create-order', authRequired, authorizeRoles('patient'), createRazorpayOrder);
+router.post('/payment/verify', authRequired, authorizeRoles('patient'), verifyRazorpayPayment);
+router.post('/payment/webhook', handleRazorpayWebhook);
+
 
 // Pharmacy management routes (pharmacy role required)
 router.post('/create', authRequired, authorizeRoles('pharmacy'), createPharmacy);

@@ -8,6 +8,7 @@ import Badge from '../ui/Badge'
 import Button from '../ui/Button'
 import Avatar from '../ui/Avatar'
 import Skeleton from '../ui/Skeleton'
+import NotificationCard from '../notifications/NotificationCard.jsx'
 import { appointmentStatus, orderStatus, formatDate, isToday } from '../../lib/status'
 import { isRemote } from '../../lib/consultation'
 
@@ -178,6 +179,8 @@ export default function PatientHome() {
           )}
         </MiniCard>
       </div>
+
+      <NotificationCard />
     </div>
   )
 }

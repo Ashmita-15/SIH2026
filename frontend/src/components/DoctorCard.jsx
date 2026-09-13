@@ -75,13 +75,18 @@ export default function DoctorCard({ doctor, onBook, onView, selected, onSelect,
           </div>
         </dl>
 
+        {/* Listed so patients can find them, but booking is session-only. */}
+        {doctor.bookable === false && (
+          <p className="text-caption text-muted mb-3">{t('doctors.notBookable')}</p>
+        )}
+
         <div className="flex gap-2 mt-auto">
           {onView && (
             <Button variant="secondary" size="sm" className="flex-1" onClick={() => onView(doctor)}>
               {t('doctors.viewProfile')}
             </Button>
           )}
-          {onBook && (
+          {onBook && doctor.bookable !== false && (
             <Button size="sm" className="flex-1" onClick={() => onBook(doctor)}>
               {t('doctors.bookAppointment')}
             </Button>

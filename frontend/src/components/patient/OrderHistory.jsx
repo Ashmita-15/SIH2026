@@ -37,23 +37,23 @@ export default function OrderHistory() {
   }
   if (orders.length === 0) {
     return (
-      <Card><CardBody>
+      <Card className="mb-28 sm:mb-32"><CardBody>
         <EmptyState
           icon={
             <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.7" aria-hidden="true">
               <path strokeLinecap="round" strokeLinejoin="round" d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.3 2.3M17 17a2 2 0 100 4 2 2 0 000-4zM9 17a2 2 0 100 4 2 2 0 000-4z" />
             </svg>
           }
-          title={t('pharmacy.cartEmpty')}
-          message={t('patient.overview.noOrderHelp')}
-          action={<Link to="/patient/medicine" className="btn btn-primary">{t('patient.overview.orderMedicine')}</Link>}
+          title={t('pharmacy.orders.empty', 'No medicine orders yet')}
+          message={t('pharmacy.orders.emptyHelp', 'Your medicine orders will appear here once placed.')}
+          action={<Link to="/patient/medicine" className="btn btn-primary">{t('patient.overview.orderMedicine', 'Browse Medicines')}</Link>}
         />
       </CardBody></Card>
     )
   }
 
   return (
-    <div className="flex flex-col gap-4">
+    <div className="flex flex-col gap-4 pb-28 sm:pb-32">
       {orders.map(order => {
         const status = orderStatus(order.status, t)
         return (
@@ -68,8 +68,16 @@ export default function OrderHistory() {
                 </div>
                 <div className="text-right shrink-0">
                   <p className="card-title tabular">₹{order.totalAmount}</p>
-                  <Badge tone={status.tone} className="mt-1">{status.label}</Badge>
+                  <div className="flex items-center gap-1.5 justify-end mt-1">
+                    {order.paymentMethod === 'online' && order.paymentStatus === 'paid' && (
+                      <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-success-50 text-success-700 border border-success-200 dark:bg-success-950/40 dark:text-success-300">
+                        Paid
+                      </span>
+                    )}
+                    <Badge tone={status.tone}>{status.label}</Badge>
+                  </div>
                 </div>
+
               </div>
 
               <ul className="text-small text-body space-y-1 mb-4">

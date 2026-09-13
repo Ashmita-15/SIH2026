@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useCallback } from 'react'
 import { Routes, Route, Navigate, useNavigate, useParams } from 'react-router-dom'
+import NotificationsPage from './NotificationsPage'
 import Page from '../components/app/Page'
 import VideoCall from '../components/VideoCall'
 import Worklist from '../components/healthWorker/Worklist'
@@ -46,6 +47,7 @@ export default function HealthWorkerDashboard() {
       <Route path="referrals" element={<WorkerReferrals />} />
       <Route path="referrals/:referralId" element={<WorkerReferralDetail />} />
       <Route path="profile" element={<Overview profile={profile} />} />
+      <Route path="notifications" element={<NotificationsPage />} />
       <Route path="*" element={<Navigate to="/health-worker" replace />} />
     </Routes>
   )
@@ -84,7 +86,12 @@ function Overview({ profile }) {
                 )}
               </>
             ) : (
-              <p className="text-small text-muted">No facility assigned</p>
+              <>
+                <p className="text-small text-muted">No facility assigned</p>
+                <p className="text-caption text-muted mt-1.5">
+                  Ask your PHC or hospital to add you on their Health workers page — referrals unlock once they do.
+                </p>
+              </>
             )}
           </CardBody>
         </Card>
@@ -341,28 +348,43 @@ function PatientDetail({ profile }) {
   const [error, setError] = useState('')
   const [visiting, setVisiting] = useState(false)
   const [sheet, setSheet] = useState(null)   // 'consult' | 'plan'
+  const [sectionErrors, setSectionErrors] = useState([])
 
   const load = useCallback(async () => {
+    setError('')
+    // The patient is the page: if this is refused, there is nothing to show.
     try {
-      const [p, v, r, c, cp, ref] = await Promise.all([
-        api.get(`/health-worker/patients/${patientId}`),
-        api.get(`/health-worker/patients/${patientId}/encounters`),
-        api.get('/health-worker/danger-rules'),
-        api.get(`/health-worker/patients/${patientId}/consultations`),
-        api.get(`/health-worker/patients/${patientId}/care-plans`),
-        api.get('/referrals', { params: { patientId } })
-      ])
-      setPatient(p.data)
-      setVisits(v.data)
-      setConsults(c.data)
-      setPlans(cp.data)
-      setReferrals(ref.data)
-      // Labels come from the server so a threshold change never leaves the
-      // screen describing a rule that no longer exists.
-      setRules(r.data)
+      const { data } = await api.get(`/health-worker/patients/${patientId}`)
+      setPatient(data)
     } catch (e) {
       setError(friendlyError(e))
+      return
     }
+
+    /**
+     * Everything else is a section of the page, not the page. These used to be
+     * one Promise.all with the patient, so a single refused list — the
+     * referral list refused any worker no facility had attached yet — replaced
+     * the whole profile with an error. Each section now loads on its own, and
+     * one that fails is named rather than hidden.
+     */
+    const sections = [
+      ['visits', api.get(`/health-worker/patients/${patientId}/encounters`), setVisits, []],
+      // Labels come from the server so a threshold change never leaves the
+      // screen describing a rule that no longer exists.
+      ['danger sign labels', api.get('/health-worker/danger-rules'), setRules, []],
+      ['doctor consultations', api.get(`/health-worker/patients/${patientId}/consultations`), setConsults, []],
+      ['care plans', api.get(`/health-worker/patients/${patientId}/care-plans`), setPlans, []],
+      ['referrals', api.get('/referrals', { params: { patientId } }), setReferrals, []]
+    ]
+    const settled = await Promise.allSettled(sections.map(([, request]) => request))
+    const failed = []
+    settled.forEach((result, i) => {
+      const [label, , setter, fallback] = sections[i]
+      if (result.status === 'fulfilled') setter(result.value.data || fallback)
+      else { setter(fallback); failed.push(label) }
+    })
+    setSectionErrors(failed)
   }, [patientId])
 
   useEffect(() => { load() }, [load])
@@ -389,6 +411,13 @@ function PatientDetail({ profile }) {
         </div>
       }
     >
+      {sectionErrors.length > 0 && (
+        <Alert tone="warning" className="mb-6"
+               action={<Button size="sm" variant="secondary" onClick={load}>Try again</Button>}>
+          Some parts of this record couldn't load: {sectionErrors.join(', ')}.
+        </Alert>
+      )}
+
       {plans.length > 0 && (
         <section className="mb-6">
           <p className="text-caption text-muted mb-2">Care plans</p>
@@ -520,6 +549,7 @@ function PatientDetail({ profile }) {
 
       {sheet === 'refer' && (
         <ReferPatient patient={patient} visits={visits} facilityId={profile?.facility?._id}
+                      attached={Boolean(profile?.facility)}
                       onClose={() => setSheet(null)}
                       onDone={() => { setSheet(null); toast.success('Referral created'); load() }} />
       )}
@@ -982,10 +1012,11 @@ function TriageSuggestion({ assessment, current, onUse }) {
  * destination is filtered by what the case needs and chosen by the worker;
  * nothing picks it for them.
  */
-function ReferPatient({ patient, visits, facilityId, onClose, onDone }) {
+function ReferPatient({ patient, visits, facilityId, attached = true, onClose, onDone }) {
   const withSigns = visits.find(v => v.dangerSigns?.length) || visits[0]
   const [form, setForm] = useState({
-    toFacilityId: '',
+    // The receiving hospital's account id — the only destination identifier sent.
+    toHospitalUserId: '',
     priority: withSigns?.dangerSigns?.length ? 'urgent_24h' : 'routine_7d',
     reason: '',
     clinicalSummary: summarise(withSigns, patient),
@@ -1014,13 +1045,33 @@ function ReferPatient({ patient, visits, facilityId, onClose, onDone }) {
 
   const set = (k) => (e) => setForm(f => ({ ...f, [k]: e.target.value }))
 
+  /**
+   * A referral is sent from the worker's facility, so an account no facility
+   * has attached cannot send one — the server refuses it. Said here, before
+   * the form is filled in, rather than after.
+   */
+  if (!attached) {
+    return (
+      <Modal open onClose={onClose} title={`Refer ${patient.name}`}>
+        <Alert tone="info" title="Referrals unlock once you are added to a facility">
+          A referral is sent from your PHC or sub-centre, so your account needs to belong to one first.
+          Ask your facility to add you on their Health workers page. Visits, doctor consultations and
+          care plans work in the meantime.
+        </Alert>
+        <div className="flex justify-end mt-4">
+          <Button variant="ghost" onClick={onClose}>Close</Button>
+        </div>
+      </Modal>
+    )
+  }
+
   const submit = async (e) => {
     e.preventDefault()
     setError(''); setBusy(true)
     try {
       await api.post('/referrals', {
         patientId: patient._id,
-        toFacilityId: form.toFacilityId,
+        toHospitalUserId: form.toHospitalUserId,
         encounterId: form.encounterId || undefined,
         priority: form.priority,
         reason: form.reason,
@@ -1038,8 +1089,8 @@ function ReferPatient({ patient, visits, facilityId, onClose, onDone }) {
     <Modal open onClose={onClose} title={`Refer ${patient.name}`} size="lg">
       <form onSubmit={submit} className="space-y-4">
         <Field label="Where to" required>
-          {() => <FacilityPicker value={form.toFacilityId} excludeId={facilityId}
-                                 onChange={(id) => setForm(f => ({ ...f, toFacilityId: id }))} />}
+          {() => <FacilityPicker value={form.toHospitalUserId} excludeFacilityId={facilityId}
+                                 onChange={(id) => setForm(f => ({ ...f, toHospitalUserId: id }))} />}
         </Field>
 
         <TriageSuggestion assessment={triage} current={form.priority}
@@ -1081,7 +1132,7 @@ function ReferPatient({ patient, visits, facilityId, onClose, onDone }) {
         {error && <p className="error-text" role="alert">{error}</p>}
         <div className="flex gap-2 justify-end">
           <Button type="button" variant="ghost" onClick={onClose}>Cancel</Button>
-          <Button type="submit" disabled={busy || !form.toFacilityId}>{busy ? 'Sending…' : 'Send referral'}</Button>
+          <Button type="submit" disabled={busy || !form.toHospitalUserId}>{busy ? 'Sending…' : 'Send referral'}</Button>
         </div>
       </form>
     </Modal>

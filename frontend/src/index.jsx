@@ -8,6 +8,10 @@ import { AuthProvider } from './context/AuthContext.jsx'
 import { ToastProvider } from './components/ui/Toast.jsx'
 import './styles/tailwind.css'
 import './translations/i18n.js'
+import './pwaRegister.js'
+import { initSyncManager } from './lib/offline/syncManager.js'
+
+initSyncManager()
 
 const root = createRoot(document.getElementById('root'))
 root.render(

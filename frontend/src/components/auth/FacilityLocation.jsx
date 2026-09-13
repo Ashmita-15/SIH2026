@@ -94,20 +94,26 @@ export default function FacilityLocation({ value, onChange, error }) {
     setBusy(true)
     try {
       const { data } = await api.get('/geo/search', { params: { q: typed } })
-      if (!data?.address) throw new Error('no match')
+      // The endpoint returns a ranked list — the nearby map offers the choice,
+      // sign-up takes the best match. An empty list is "no such place", which
+      // is a different message from a failed lookup.
+      const best = data?.results?.[0]
+      if (!best) {
+        onChange(null)
+        setFailure(t('auth.location.noMatch'))
+        return
+      }
       // Its canonical name, not the words typed, so the person confirms what
       // the map service actually matched.
       onChange({
-        latitude: data.latitude,
-        longitude: data.longitude,
-        address: data.address,
+        latitude: best.lat,
+        longitude: best.lon,
+        address: best.label,
         source: 'manual'
       })
-    } catch (err) {
+    } catch {
       onChange(null)
-      setFailure(err?.response?.status === 404
-        ? t('auth.location.noMatch')
-        : t('auth.location.searchFailed'))
+      setFailure(t('auth.location.searchFailed'))
     } finally {
       setBusy(false)
     }

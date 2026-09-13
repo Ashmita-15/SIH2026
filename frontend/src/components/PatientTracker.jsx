@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 import api, { friendlyError } from '../services/api'
+import { queueOrExecute } from '../lib/offline/mutationQueue'
 import { useAuth } from '../context/AuthContext'
 import { useToast } from './ui/Toast'
 import Card, { CardBody, CardHeader } from './ui/Card'
@@ -88,13 +89,23 @@ export default function PatientTracker() {
     e.preventDefault()
     setSaving(true)
     try {
-      await api.post('/records/create', {
-        patientId: selected._id,
-        appointmentId: draft.appointmentId,
-        diagnosis: draft.diagnosis,
-        prescription: draft.prescription
+      const res = await queueOrExecute({
+        userId,
+        type: 'CREATE_RECORD',
+        endpoint: '/records/create',
+        method: 'POST',
+        payload: {
+          patientId: selected._id,
+          appointmentId: draft.appointmentId,
+          diagnosis: draft.diagnosis,
+          prescription: draft.prescription
+        }
       })
-      toast.success(t('records.recordSaved'))
+      if (res.queued) {
+        toast.info(t('records.savedOffline', 'Record saved offline. Will sync when online.'))
+      } else {
+        toast.success(t('records.recordSaved'))
+      }
       setWriteOpen(false)
       selectPatient(selected)
     } catch (err) {

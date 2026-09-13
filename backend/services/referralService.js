@@ -9,6 +9,8 @@ import HealthRecord from '../models/HealthRecord.js';
 import User from '../models/User.js';
 import * as tasks from './taskService.js';
 import { badRequest, forbidden, notFound, conflict } from './errors.js';
+import { listReferralDestinations, resolveHospitalRecipient } from './hospitalDirectory.js';
+import { coversVillage } from './healthWorkerService.js';
 import { notifyReferralCreated, notifyReferralStatusChanged } from './notifications/notificationService.js';
 /**
  * Referral business logic.
@@ -113,6 +115,9 @@ async function resolveActor(ctx) {
 
 /** Which end of this referral the actor stands at, if either. */
 function sideOf(actor, referral) {
+    // The hospital account a referral was addressed to is its destination.
+    const recipient = referral.toHospitalUserId?._id || referral.toHospitalUserId;
+    if (recipient && actor.role === 'hospital' && actor.id === String(recipient)) return 'destination';
     if (!actor.facilityId) return null;
     if (actor.facilityId === String(referral.fromFacilityId?._id || referral.fromFacilityId)) return 'origin';
     if (actor.facilityId === String(referral.toFacilityId?._id || referral.toFacilityId)) return 'destination';
@@ -147,13 +152,18 @@ export async function createReferral(input, ctx) {
     if (!ACTING_ROLES.includes(actor.role)) {
         throw forbidden('Only a doctor, health worker or facility can create a referral');
     }
+    /**
+     * A referral goes from a facility, so the sender needs one. A health worker
+     * who registered themselves has none until their PHC or hospital attaches
+     * them on its staff page — that is the step to take, and the message says so.
+     */
     if (!actor.facilityId) {
-        throw badRequest('Your account is not attached to a facility, so it cannot refer from one');
+        throw forbidden('Referrals unlock once your PHC or hospital adds you to their facility.');
     }
 
-    const { patientId, toFacilityId, priority, reason } = input;
+    const { patientId, priority, reason } = input;
     if (!patientId) throw badRequest('patientId is required');
-    if (!toFacilityId) throw badRequest('toFacilityId is required');
+    if (!input.toHospitalUserId && !input.toFacilityId) throw badRequest('toHospitalUserId is required');
     if (!priority) throw badRequest('priority is required');
     if (!reason || !String(reason).trim()) throw badRequest('reason is required');
     if (!REFERRAL_PRIORITIES.includes(priority)) {
@@ -170,17 +180,33 @@ export async function createReferral(input, ctx) {
     if (input.fromFacilityId && String(input.fromFacilityId) !== fromFacilityId) {
         throw forbidden('You can only refer from your own facility');
     }
-    if (String(toFacilityId) === fromFacilityId) {
+    /**
+     * The destination is a hospital account, verified here. The facility it is
+     * stored under comes from that account, so a referral cannot be addressed
+     * to a Hospital record no account's inbox reads. See hospitalDirectory.js.
+     */
+    const recipient = await resolveHospitalRecipient({
+        toHospitalUserId: input.toHospitalUserId,
+        toFacilityId: input.toFacilityId
+    });
+    const toFacilityId = recipient.facilityId;
+    const destination = recipient.facility;
+    if (toFacilityId === fromFacilityId) {
         throw badRequest('A referral must go to a different facility');
     }
 
-    const patient = await User.findById(patientId).select('role name email');
+    const patient = await User.findById(patientId).select('role name email village');
     if (!patient) throw notFound('Patient not found');
     if (patient.role !== 'patient') throw badRequest('That user is not a patient');
 
-    const destination = await Hospital.findById(toFacilityId).select('name isActive ownerId level email');
-    if (!destination) throw notFound('Destination facility not found');
-    if (!destination.isActive) throw badRequest('That destination facility is not active');
+    // The same catchment rule every other health-worker route applies: a worker
+    // acts only for patients in the villages they cover.
+    if (actor.role === 'health_worker') {
+        const worker = await User.findById(actor.id).select('catchmentVillages');
+        if (!worker || !coversVillage(worker, patient.village)) {
+            throw forbidden('You can only refer patients from your own catchment villages');
+        }
+    }
 
     // An encounter, if given, must belong to this patient — otherwise the
     // referral would carry someone else's clinical history to another facility.
@@ -206,6 +232,7 @@ export async function createReferral(input, ctx) {
         patientId,
         fromFacilityId,
         toFacilityId,
+        toHospitalUserId: recipient.userId,
         createdBy: actor.id,
         encounterId: input.encounterId || undefined,
         priority,
@@ -224,7 +251,7 @@ export async function createReferral(input, ctx) {
      */
     await tasks.onReferralCreated(referral, toFacilityId);
     announce(ctx?.io, 'referral:created',
-        [`user_${destination.ownerId}`, `user_${patientId}`],
+        [`user_${recipient.userId}`, `user_${patientId}`],
         { referralId: referral._id, code: referral.referralId, priority, dueBy: referral.dueBy });
     Hospital.findById(fromFacilityId).select('name').then(fromFacility => {
         notifyReferralCreated({
@@ -232,7 +259,8 @@ export async function createReferral(input, ctx) {
             patient,
             fromFacilityName: fromFacility?.name,
             toFacilityEmail: destination.email,
-            toFacilityName: destination.name
+            toFacilityName: destination.name,
+            toHospitalUserId: recipient.userId
         }).catch(() => {});
     }).catch(() => {});
     return getReferralById(referral._id, ctx);
@@ -269,9 +297,26 @@ export async function listReferrals(filters = {}, ctx) {
 
     if (actor.role === 'patient') {
         query.patientId = actor.id;
+    } else if (!actor.facilityId) {
+        /**
+         * An account no facility has attached yet has no facility referrals —
+         * but a health worker or doctor can still have referrals they raised
+         * themselves, which canView already lets a creator open. This used to
+         * be a 403, and because the patient profile loads this list, every
+         * patient became unopenable for a newly registered health worker.
+         */
+        if (!['health_worker', 'doctor'].includes(actor.role)) {
+            throw forbidden('Your account is not attached to a facility');
+        }
+        query.createdBy = actor.id;
     } else {
-        if (!actor.facilityId) throw forbidden('Your account is not attached to a facility');
-        query.$or = [{ fromFacilityId: actor.facilityId }, { toFacilityId: actor.facilityId }];
+        query.$or = [
+            { fromFacilityId: actor.facilityId },
+            { toFacilityId: actor.facilityId },
+            // Referrals this person raised stay visible if they later move facility.
+            { createdBy: actor.id }
+        ];
+        if (actor.role === 'hospital') query.$or.push({ toHospitalUserId: actor.id });
     }
 
     if (filters.patientId) query.patientId = filters.patientId;
@@ -407,7 +452,7 @@ export async function transitionReferral(id, toStatus, payload = {}, ctx) {
     ]);
 
     announce(ctx?.io, 'referral:updated',
-        [`user_${origin?.ownerId}`, `user_${destination?.ownerId}`, `user_${referral.patientId?._id || referral.patientId}`],
+        [`user_${origin?.ownerId}`, `user_${referral.toHospitalUserId || destination?.ownerId}`, `user_${referral.patientId?._id || referral.patientId}`],
         { referralId: referral._id, code: referral.referralId, status: toStatus, by: actor.name });
     notifyReferralStatusChanged({
         referral,
@@ -427,6 +472,22 @@ export async function transitionReferral(id, toStatus, payload = {}, ctx) {
  */
 export function completeReferral(id, counterReferral, ctx, note = '') {
     return transitionReferral(id, 'completed', { counterReferral, note }, ctx);
+}
+
+/**
+ * Hospitals the actor may refer to: verified hospital accounts, never the raw
+ * Hospital collection, and never the actor's own facility.
+ */
+export async function listDestinations(filters = {}, ctx) {
+    const actor = await resolveActor(ctx);
+    if (!ACTING_ROLES.includes(actor.role)) {
+        throw forbidden('Only a doctor, health worker or facility can refer a patient');
+    }
+    return listReferralDestinations({
+        capability: filters.capability,
+        level: filters.level,
+        excludeFacilityId: actor.facilityId
+    });
 }
 
 /** Exposed so a controller or an agent can show what is possible next. */
