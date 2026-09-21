@@ -23,17 +23,24 @@ const FILTERS = {
 };
 
 // Small first, widened only while there are too few results. Metres.
-const RADII_M = [3000, 8000, 15000, 30000];
-const MIN_RESULTS = 10;
-const ATTEMPT_TIMEOUT_MS = 12_000;
-const TOTAL_BUDGET_MS = 30_000;
+// Fewer, larger steps than before: every step is another chance for a busy
+// public server to fail, and rural areas used to walk through all four.
+const RADII_M = [4000, 12000, 30000];
+const MIN_RESULTS = 10;        // most places returned
+const WIDEN_BELOW = 5;         // widen the search only when fewer than this were found
+const ATTEMPT_TIMEOUT_MS = 14_000;
+const HEDGE_AFTER_MS = 3_500;  // start the next mirror if the current one is this slow
+const TOTAL_BUDGET_MS = 40_000;
 const CACHE_TTL_MS = 10 * 60 * 1000;
+const EMPTY_CACHE_TTL_MS = 2 * 60 * 1000;  // an empty answer is the one most worth re-checking
+const STALE_MAX_AGE_MS = 24 * 60 * 60 * 1000; // last good answer, served only when every mirror is down
 const CACHE_MAX = 200;
 
 const DEFAULT_ENDPOINTS = [
     'https://overpass-api.de/api/interpreter',
     'https://overpass.private.coffee/api/interpreter',
-    'https://overpass.kumi.systems/api/interpreter'
+    'https://overpass.kumi.systems/api/interpreter',
+    'https://maps.mail.ru/osm/tools/overpass/api/interpreter'
 ];
 
 /** `OVERPASS_URLS` (comma-separated, https only) replaces the default list. */
@@ -53,10 +60,106 @@ export class MapDataUnavailableError extends Error {
     }
 }
 
-// The mirror that answered last is tried first, so one dead instance costs
-// one timeout per process rather than one per search.
+// The mirror that answered last is tried first.
 let preferred = 0;
 const cache = new Map();
+const inflight = new Map();
+
+/**
+ * Overpass reports some failures with HTTP 200: when a query runs out of time
+ * or memory it returns whatever it had — often nothing — plus a `remark`.
+ * Treating that as "no results" is what made searches say "Nothing found"
+ * (and cache it) whenever a public server was merely busy.
+ */
+function assertComplete(body) {
+    if (!Array.isArray(body?.elements)) throw new Error('Malformed Overpass response');
+    const remark = String(body.remark || '');
+    if (/runtime error|timed out|out of memory|too many requests|rate.?limit/i.test(remark)) {
+        throw new Error(`Overpass remark: ${remark.slice(0, 120)}`);
+    }
+}
+
+async function queryMirror(url, query, timeoutMs, outerSignal) {
+    const controller = new AbortController();
+    const onOuterAbort = () => controller.abort();
+    outerSignal.addEventListener('abort', onOuterAbort, { once: true });
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+        const res = await fetch(url, {
+            method: 'POST',
+            body: 'data=' + encodeURIComponent(query),
+            headers: {
+                'Content-Type': 'application/x-www-form-urlencoded',
+                'User-Agent': userAgent(),
+                Accept: 'application/json'
+            },
+            signal: controller.signal
+        });
+        // 429 and 504 are how Overpass says "busy" — the next mirror may not be.
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        // A mirror that is down often serves an HTML error page: json() throws, which is a failure too.
+        const body = await res.json();
+        assertComplete(body);
+        return body.elements;
+    } finally {
+        clearTimeout(timer);
+        outerSignal.removeEventListener('abort', onOuterAbort);
+    }
+}
+
+/**
+ * Asks the mirrors in turn, but does not wait for a slow one to fail: the next
+ * mirror is started after HEDGE_AFTER_MS (or at once if the current one errors),
+ * the earlier ones keep running, and the first complete answer wins.
+ */
+function runQuery(query, deadline) {
+    const list = endpoints();
+    const winner = new AbortController();
+
+    return new Promise((resolve, reject) => {
+        let started = 0;
+        let pending = 0;
+        let settled = false;
+        let lastError = null;
+        let hedgeTimer = null;
+
+        const finish = (fn, value) => {
+            if (settled) return;
+            settled = true;
+            clearTimeout(hedgeTimer);
+            winner.abort(); // stop the losers
+            fn(value);
+        };
+
+        const startNext = () => {
+            clearTimeout(hedgeTimer);
+            const remaining = deadline - Date.now();
+            if (settled) return;
+            if (started >= list.length || remaining < 1000) {
+                if (pending === 0) finish(reject, new MapDataUnavailableError(lastError?.message));
+                return;
+            }
+            const index = (preferred + started) % list.length;
+            started++;
+            pending++;
+            queryMirror(list[index], query, Math.min(ATTEMPT_TIMEOUT_MS, remaining), winner.signal)
+                .then(elements => {
+                    preferred = index;
+                    finish(resolve, elements);
+                })
+                .catch(err => {
+                    if (settled) return;
+                    lastError = err;
+                    console.warn(`[overpass] ${new URL(list[index]).host} failed: ${err.name === 'AbortError' ? 'timeout' : err.message}`);
+                    pending--;
+                    startNext(); // a failure moves on immediately
+                });
+            hedgeTimer = setTimeout(startNext, HEDGE_AFTER_MS); // a slow answer moves on too
+        };
+
+        startNext();
+    });
+}
 
 function buildQuery(category, lat, lon, radius) {
     const la = lat.toFixed(6);
@@ -76,44 +179,6 @@ function haversineMetres(lat1, lon1, lat2, lon2) {
 }
 
 const clip = (s, n) => String(s || '').trim().slice(0, n);
-
-async function runQuery(query, deadline) {
-    const list = endpoints();
-    let lastError = null;
-
-    for (let i = 0; i < list.length; i++) {
-        const index = (preferred + i) % list.length;
-        const remaining = deadline - Date.now();
-        if (remaining < 1000) break;
-
-        const controller = new AbortController();
-        const timer = setTimeout(() => controller.abort(), Math.min(ATTEMPT_TIMEOUT_MS, remaining));
-        try {
-            const res = await fetch(list[index], {
-                method: 'POST',
-                body: 'data=' + encodeURIComponent(query),
-                headers: {
-                    'Content-Type': 'application/x-www-form-urlencoded',
-                    'User-Agent': userAgent(),
-                    Accept: 'application/json'
-                },
-                signal: controller.signal
-            });
-            // 429 and 504 are how Overpass says "busy" — the next mirror may not be.
-            if (!res.ok) throw new Error(`HTTP ${res.status}`);
-            const body = await res.json();
-            if (!Array.isArray(body?.elements)) throw new Error('Malformed Overpass response');
-            preferred = index;
-            return body.elements;
-        } catch (err) {
-            lastError = err;
-            console.warn(`[overpass] ${new URL(list[index]).host} failed: ${err.name === 'AbortError' ? 'timeout' : err.message}`);
-        } finally {
-            clearTimeout(timer);
-        }
-    }
-    throw new MapDataUnavailableError(lastError?.message);
-}
 
 function toPlaces(elements, category, lat, lon) {
     return elements
@@ -153,6 +218,31 @@ export async function searchNearby(category, lat, lon) {
     const hit = cache.get(key);
     if (hit && hit.expires > Date.now()) return hit.value;
 
+    // Two people searching the same spot at once share one upstream request.
+    if (inflight.has(key)) return inflight.get(key);
+
+    const job = (async () => {
+        try {
+            const value = await searchUncached(category, lat, lon);
+            const ttl = value.places.length ? CACHE_TTL_MS : EMPTY_CACHE_TTL_MS;
+            if (cache.size >= CACHE_MAX) cache.delete(cache.keys().next().value);
+            cache.set(key, { value, expires: Date.now() + ttl, savedAt: Date.now() });
+            return value;
+        } catch (err) {
+            // Every mirror is down: an older real answer beats an error page.
+            if (err.code === 'MAP_DATA_UNAVAILABLE' && hit?.value && Date.now() - hit.savedAt < STALE_MAX_AGE_MS) {
+                return { ...hit.value, stale: true };
+            }
+            throw err;
+        } finally {
+            inflight.delete(key);
+        }
+    })();
+    inflight.set(key, job);
+    return job;
+}
+
+async function searchUncached(category, lat, lon) {
     const deadline = Date.now() + TOTAL_BUDGET_MS;
     let best = null;
 
@@ -162,7 +252,7 @@ export async function searchNearby(category, lat, lon) {
             elements = await runQuery(buildQuery(category, lat, lon, radius), deadline);
         } catch (err) {
             // Results from a smaller radius are still real results.
-            if (best) return { ...best, partial: true };
+            if (best && best.places.length) return { ...best, partial: true };
             throw err;
         }
         best = {
@@ -171,10 +261,7 @@ export async function searchNearby(category, lat, lon) {
             partial: false,
             source: 'openstreetmap'
         };
-        if (best.places.length >= MIN_RESULTS) break;
+        if (best.places.length >= WIDEN_BELOW) break;
     }
-
-    if (cache.size >= CACHE_MAX) cache.delete(cache.keys().next().value);
-    cache.set(key, { value: best, expires: Date.now() + CACHE_TTL_MS });
     return best;
 }

@@ -86,6 +86,29 @@ function DraggableMarker({ position, onDrag }) {
  * An outage is now shown as an outage, with a retry.
  */
 
+/*
+ * A free-tier server that has been idle answers its first request slowly or
+ * with a gateway error, and a busy map mirror can fail one attempt and succeed
+ * the next. Both look like "broken" to the person waiting, so those cases get
+ * one automatic second try before an error is shown. Anything else (a bad
+ * request, an expired session) is not transient and is not retried.
+ */
+function isTransient(err) {
+  if (!err.response) return true // network error or timeout
+  const s = err.response.status
+  return s === 502 || s === 503 || s === 504
+}
+
+async function getWithRetry(url, config) {
+  try {
+    return await api.get(url, config)
+  } catch (err) {
+    if (!isTransient(err)) throw err
+    await new Promise(r => setTimeout(r, 1500))
+    return api.get(url, config)
+  }
+}
+
 /* ─── OSRM walking route (only fetched on demand, not for every result) ─── */
 async function fetchWalkingRoute(fromLat, fromLng, toLat, toLng) {
   const url = `https://router.project-osrm.org/route/v1/foot/${fromLng},${fromLat};${toLng},${toLat}?overview=full&geometries=geojson`
@@ -153,6 +176,9 @@ export default function NearbyPage() {
   // Switching category mid-search must not let the older response win.
   const searchSeq = useRef(0)
 
+  /* Wake the API while the person is still choosing a location, so the first search isn't the one that pays for a cold start. */
+  useEffect(() => { api.get('/health', { timeout: 60000, skipAuthRedirect: true }).catch(() => {}) }, [])
+
   /* ─── Location detection ─── */
   const detectLocation = useCallback(async () => {
     setDetectingLocation(true)
@@ -213,7 +239,7 @@ export default function NearbyPage() {
     setPhase('results')
     try {
       // Generous timeout: a sleeping Render instance can take most of a minute to wake.
-      const { data } = await api.get('/geo/nearby', {
+      const { data } = await getWithRetry('/geo/nearby', {
         params: { category: cat, lat: userLoc.lat, lon: userLoc.lng },
         timeout: 60000
       })
