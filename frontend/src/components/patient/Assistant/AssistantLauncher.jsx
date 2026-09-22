@@ -137,7 +137,7 @@ export default function AssistantLauncher() {
             onClick={() => setOpen(true)}
             aria-label={t('assistant.launcher')}
             className="fixed left-4 lg:left-5 z-40 h-11 lg:h-12 px-4 rounded-full
-                       bottom-[calc(env(safe-area-inset-bottom)+1rem)] lg:bottom-5
+                       bottom-[calc(env(safe-area-inset-bottom)+5rem)] lg:bottom-20
                        bg-surface text-primary-700 border-2 border-primary-200 font-semibold
                        shadow-lifted hover:bg-primary-50 transition-colors flex items-center gap-2"
           >

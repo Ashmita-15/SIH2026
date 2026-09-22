@@ -168,12 +168,11 @@ export const chat = async (req, res) => {
 
     if (citations.length) send(res, { type: 'citations', items: citations });
 
-    if (!urgent && guidance?.goal === 'FIND_DOCTOR') {
-        const hints = await extractBookingHints({ messages: history, lang: locale, signal: controller.signal }).catch(() => null);
-        if (hints) {
-            send(res, { type: 'booking_hints', hints });
-        }
-    }
+    // booking_hints are NOT sent on the initial FIND_DOCTOR navigate turn.
+    // At that point the user's text is a symptom sentence ("I have fever"), not a
+    // doctor name, and the extractor returns garbage that triggers "I could not find
+    // that doctor". Hints are collected on the next turn, when booking.active is set
+    // and the user actually names a doctor.
 
     /**
      * Decision support, sent as its own event so the client renders it beside

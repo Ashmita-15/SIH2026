@@ -903,7 +903,7 @@
     }
   },
   "booking": {
-    "askDoctor": "Which doctor would you like to see?",
+    "askDoctor": "Here are the available doctors: {{list}}. Which one would you like to see?",
     "doctorUnknown": "I could not find that doctor. The doctors available are: {{list}}. Which one would you like?",
     "doctorAmbiguous": "I found more than one: {{list}}. Which one would you like?",
     "askDate": "Alright, {{doctor}}. Which day would you like — today, tomorrow, or the day after?",
@@ -926,7 +926,10 @@
     "askSession": "On {{date}} these sessions are open: {{sessions}}. Which one would you like?",
     "sessionUnknown": "I did not catch which session. These are open: {{sessions}}.",
     "queueLater": "Your queue number and arrival time will be given after booking closes, a few hours before the session.",
-    "bookedSession": "Done. Your appointment with {{doctor}} is requested for {{date}}, {{slot}}."
+    "bookedSession": "Done. Your appointment with {{doctor}} is requested for {{date}}, {{slot}}.",
+    "confirmPrompt": "Please say yes to confirm the appointment, or no to cancel it.",
+    "chooseDoctor": "Alright, I'll help you find a doctor. Let me show you the available doctors: {{list}}. Which doctor would you like to see?",
+    "inProgress": "One moment, I am sending your booking now."
   },
   "staff": {
     "title": "Health workers",

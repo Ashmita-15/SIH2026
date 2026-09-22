@@ -36,8 +36,10 @@ export const BOOKING = {
  * mistaken for a refusal.
  */
 const AFFIRM = ['haan', 'han', 'ha', 'ji', 'ji haan', 'theek hai', 'thik hai', 'ok', 'okay', 'yes', 'yeah', 'yep', 'sure',
-  'book it', 'book kar do', 'kar do', 'haan book kar do',
-  'हाँ', 'हां', 'जी', 'जी हाँ', 'ठीक है', 'बिल्कुल', 'हाँ कर दीजिए', 'बुक कर दीजिए', 'बुक कर दो',
+  'book it', 'book kar do', 'kar do', 'haan book kar do', 'confirm', 'go ahead', 'do it',
+  'yes please', 'yes book', 'book this', 'book this appointment', 'yes book this',
+  'yes book this appointment', 'yes confirm', 'please book', 'please confirm',
+  'हाँ', 'हां', 'जी', 'जी हाँ', 'ठीक है', 'बिल्कुल', 'हाँ कर दीजिए', 'बुक कर दीजिए', 'बुक कर दो', 'कन्फर्म करें', 'पक्का करें',
   'हो', 'होय', 'नक्की', 'हो करा', 'बुक करा', 'करा', 'हो बुक करा',
   'হ্যাঁ', 'হ্যা', 'ঠিক আছে', 'অবশ্যই', 'বুক করুন', 'করুন', 'হ্যাঁ বুক করুন']
 
@@ -50,7 +52,7 @@ const CANCEL = ['nahi', 'nahin', 'nai', 'rehne do', 'rahne do', 'nahi chahiye', 
 const strip = (s) => String(s || '').toLowerCase().replace(/[.!?,।]/g, ' ').replace(/\s+/g, ' ').trim()
 const shortMatch = (text, words) => {
   const t = strip(text)
-  if (!t || t.length > 30) return false
+  if (!t || t.length > 60) return false
   return words.some(w => t === w || t.startsWith(`${w} `) || t.endsWith(` ${w}`))
 }
 

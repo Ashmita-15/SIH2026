@@ -227,7 +227,11 @@ export default function AssistantChat({ compact = false, voiceStartSignal = 0, v
     // only for the turn it was read out, so "two" cannot select a doctor from
     // a question three turns old.
     const say = (text, next) => {
-      setBookingState({ ...b, pendingDoctors: null, ...next, draft })
+      // Functional update avoids spreading stale `b` over a store that may
+      // have been updated since the top of applyHints (e.g., across async awaits).
+      // The explicit `draft` at the end ensures the session/date fields just set
+      // win over whatever the store currently holds.
+      setBookingState(prev => ({ ...prev, pendingDoctors: null, ...next, draft }))
       finishReply(replyId, text, viaVoice)
     }
 
@@ -259,13 +263,18 @@ export default function AssistantChat({ compact = false, voiceStartSignal = 0, v
         draft.doctorName = doctor.name
       } else if (!draft.doctorId) {
         /**
-         * Never a guess. Several plausible names become a numbered list the
-         * patient answers; no plausible name asks again with the real ones,
-         * so a mishearing cannot strand somebody with nothing to say.
+         * Distinguish two cases:
+         * 1. User named a doctor but we can't find them → doctorUnknown
+         * 2. No doctor name was given (first FIND_DOCTOR turn, symptom sentence)
+         *    → askDoctor with the list. Never say "I could not find that doctor"
+         *    when the user never said a name.
          */
         const offered = candidates.length ? candidates : doctors.slice(0, 5)
+        const hadHint = Boolean(hints.doctorHint?.trim())
         return say(
-          t(candidates.length ? 'booking.doctorAmbiguous' : 'booking.doctorUnknown',
+          t(hadHint
+            ? (candidates.length ? 'booking.doctorAmbiguous' : 'booking.doctorUnknown')
+            : 'booking.askDoctor',
             { list: numberList(offered) }),
           {
             doctors, offer: null, confirmedFp: null,
@@ -314,6 +323,21 @@ export default function AssistantChat({ compact = false, voiceStartSignal = 0, v
     }
 
     // -- which session -------------------------------------------------
+    /**
+     * Auto-select when only one session is available.
+     *
+     * If the doctor only runs one clinic on this day, asking "which session?"
+     * is a redundant step the patient never expected. Pick it silently and
+     * proceed to confirmation — the summary will name the session, so they
+     * can still say no.
+     */
+    if (!draft.sessionId && offer.sessions.length === 1) {
+      const only = offer.sessions[0]
+      draft.sessionId = only.sessionId
+      draft.sessionName = only.name
+      draft.sessionLabel = listSessions([only])
+    }
+
     if (!draft.sessionId && (hints.bandHint || hints.hourHint || hints.sessionText)) {
       const picked = resolveSession(
         { bandHint: hints.bandHint, hourHint: hints.hourHint, text: hints.sessionText },
@@ -322,17 +346,17 @@ export default function AssistantChat({ compact = false, voiceStartSignal = 0, v
       if (picked) {
         draft.sessionId = picked.sessionId
         draft.sessionName = picked.name
-        draft.sessionLabel = listSessions([picked], lang)
+        draft.sessionLabel = listSessions([picked])
       } else {
         return say(
-          t('booking.sessionUnknown', { sessions: listSessions(offer.sessions, lang) }),
+          t('booking.sessionUnknown', { sessions: listSessions(offer.sessions) }),
           { doctors, offer, dateWord, confirmedFp: null, status: BOOKING.COLLECTING_SLOT }
         )
       }
     }
     if (!draft.sessionId) {
       return say(
-        t('booking.askSession', { date: dateLabel, sessions: listSessions(offer.sessions, lang) }),
+        t('booking.askSession', { date: dateLabel, sessions: listSessions(offer.sessions) }),
         { doctors, offer, dateWord, confirmedFp: null, status: BOOKING.COLLECTING_SLOT }
       )
     }
@@ -614,13 +638,14 @@ export default function AssistantChat({ compact = false, voiceStartSignal = 0, v
     const viaVoice = Boolean(options.viaVoice)
 
     /**
-     * Yes and no, answered here and nowhere else.
+     * Affirmation / cancellation when a confirmation is pending.
      *
-     * Deterministic and local: no model sees this decision, and no round trip
-     * stands between the patient saying "रहने दो" and it being obeyed. The
-     * whole gate is the `status` check — outside a confirmation this branch is
-     * never entered, so "haan" in ordinary conversation is just a word that
-     * goes to the assistant like any other.
+     * Handled locally, no model call: deterministic and offline-safe.
+     * Any sentence that is neither affirm nor cancel while we are awaiting
+     * confirmation is treated as unclear — the patient gets a prompt asking
+     * for yes/no, and we do NOT call run(), which would send `booking.active`
+     * to the backend, trigger applyHints, and re-display the summary (the
+     * confirmation loop).
      */
     const b = bookingRef.current
     if (b.status === BOOKING.AWAITING_CONFIRMATION && !files.length) {
@@ -635,8 +660,10 @@ export default function AssistantChat({ compact = false, voiceStartSignal = 0, v
         await confirmAndBook(viaVoice)
         return
       }
-      // Anything else is a change of mind about the details — it goes to the
-      // assistant, comes back as hints, and re-fingerprints the draft.
+      // Neither yes nor no — prompt without calling run().
+      setMessages(prev => [...prev, userMessage])
+      pushAssistant(t('booking.confirmPrompt'), viaVoice)
+      return
     }
 
     await run([...messages, userMessage], { viaVoice })
