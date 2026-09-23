@@ -697,10 +697,11 @@
     },
     "featuresEyebrow": "Everything included",
     "rolesEyebrow": "Built for everyone",
-    "rolesTitle": "One platform, four kinds of people",
-    "rolesSubtitle": "Patients, doctors, pharmacies and hospitals each get a workspace built around what they actually do.",
+    "rolesTitle": "One platform, five kinds of people",
+    "rolesSubtitle": "Patients, health workers, doctors, pharmacies and hospitals each get a workspace built around what they actually do.",
     "roleCopy": {
       "patient": "Book consultations, keep your records, check symptoms and order medicine — all from one phone.",
+      "health_worker": "Register the families in your villages, record home visits, refer patients onward and keep every follow-up on one worklist.",
       "doctor": "See today's schedule at a glance, review requests with the patient's own video, and write records in the consultation.",
       "pharmacy": "Manage stock, receive orders in real time, and keep customers updated from order to doorstep.",
       "hospital": "Bring your doctors and partner pharmacies together under one roof, and manage who's associated with you."

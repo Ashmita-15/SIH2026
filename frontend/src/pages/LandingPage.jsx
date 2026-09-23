@@ -18,6 +18,9 @@ const ICONS = {
   download: 'M12 10v6m0 0l-3-3m3 3l3-3M3 17V7a2 2 0 012-2h14a2 2 0 012 2v10a2 2 0 01-2 2H5a2 2 0 01-2-2z',
   patient: 'M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z',
   doctor: 'M8 3v4m8-4v4M6 9h12a2 2 0 012 2v8a2 2 0 01-2 2H6a2 2 0 01-2-2v-8a2 2 0 012-2zM12 13v4m-2-2h4',
+  // A person carrying care, rather than a building: the health worker is the
+  // one stakeholder who is defined by going to the patient.
+  healthWorker: 'M15 8a3 3 0 11-6 0 3 3 0 016 0zM4 20a6 6 0 019.5-4.9M18 14v6m3-3h-6',
   shop: 'M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M17 17a2 2 0 100 4 2 2 0 000-4zM9 17a2 2 0 100 4 2 2 0 000-4z',
   hospital: 'M4 21V8l8-5 8 5v13M9 21v-6h6v6M12 10v3m-1.5-1.5h3'
 }
@@ -201,9 +204,14 @@ export default function LandingPage() {
             <p className="text-lg text-body">{t('landing.rolesSubtitle')}</p>
           </div>
 
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          {/* Five across only from xl: at lg the cards would be too narrow for
+              a sentence of copy, so they wrap 3 + 2 instead. */}
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
             {[
+              // In the order care actually reaches someone: the patient, the
+              // worker who visits them, then the people they are referred on to.
               ['patient', ICONS.patient],
+              ['health_worker', ICONS.healthWorker],
               ['doctor', ICONS.doctor],
               ['pharmacy', ICONS.shop],
               ['hospital', ICONS.hospital]
